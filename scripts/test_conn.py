@@ -2,31 +2,36 @@ import snowflake.connector
 import os
 
 def run_test():
-    # Connexion via les variables d'environnement (GitHub Secrets)
+    # Récupération des variables
+    db = os.getenv('SNOWFLAKE_DATABASE')
+    schema = 'PUBLIC'
+    
     ctx = snowflake.connector.connect(
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
         warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
-        database=os.getenv('SNOWFLAKE_DATABASE'),
-        schema='PUBLIC',
         role='ACCOUNTADMIN'
     )
     
     try:
         cs = ctx.cursor()
-        # Création de la table de log pour le projet Tessan
-        cs.execute("""
-            CREATE TABLE IF NOT EXISTS HACKATHON_LOG (
+        
+        # On force l'utilisation de la DB et du Schéma 
+        cs.execute(f"USE DATABASE {db}")
+        cs.execute(f"USE SCHEMA {schema}")
+        
+        # Création de la table avec le nom complet
+        cs.execute(f"""
+            CREATE TABLE IF NOT EXISTS {db}.{schema}.HACKATHON_LOG (
                 ID INT IDENTITY(1,1),
                 MESSAGE STRING,
                 CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
             )
         """)
         
-        # Insertion du test
-        cs.execute("INSERT INTO HACKATHON_LOG (MESSAGE) VALUES ('Test réussi via Python Connector !')")
-        print("✅ Succès : La table a été mise à jour dans Snowflake.")
+        cs.execute(f"INSERT INTO {db}.{schema}.HACKATHON_LOG (MESSAGE) VALUES ('Test réussi avec DATABASE explicite !')")
+        print(f"✅ Succès : Table mise à jour dans {db}.{schema}")
         
     finally:
         cs.close()
