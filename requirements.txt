@@ -18,3 +18,8 @@ snowflake-connector-python==3.7.0
 snowflake-sqlalchemy==1.9.0
 python-dotenv==1.0.0
 pandas>=2.0
+numpy>=2.0
+matplotlib>=3.8
+seaborn>=0.13
+librosa>=0.10
+kagglehub>=1.0
