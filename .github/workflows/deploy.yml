@@ -3,17 +3,19 @@ name: Manual Snowflake Deployment
 on:
   push:
     branches:
-      - '**' # On continue de tester le code sur chaque push
+      - '**'
   workflow_dispatch:
-    # Cette ligne active le bouton "Run workflow" dans l'onglet Actions
     inputs:
       confirm_deploy:
-        description: 'Taper "OUI" pour confirmer le déploiement sur Snowflake'
+        description: 'Taper "OUI" pour confirmer le déploiement'
         required: true
         default: 'NON'
 
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
-  # Étape 1 : Vérification du code (S'exécute toujours au push)
   lint-and-check:
     runs-on: ubuntu-latest
     steps:
@@ -21,13 +23,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10' # Profites-en pour passer en 3.10+ pour éviter les warnings Boto3
       - name: Install dependencies
         run: pip install snowflake-connector-python
       - name: Syntax Check
         run: python -m py_compile scripts/deploy_infrastructure.py
 
-  # Étape 2 : Déploiement Réel (S'exécute UNIQUEMENT manuellement)
   deploy-snowflake:
     needs: lint-and-check
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_deploy == 'OUI'
@@ -37,7 +38,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
       - name: Install dependencies
         run: pip install snowflake-connector-python
       - name: Deploy Infrastructure
