@@ -1,4 +1,4 @@
-.PHONY: help venv download_dataset 
+.PHONY: help venv download_dataset stage
 
 help:
 	@echo "📋 Asthma Detection Dataset - Snowflake Commands"
@@ -6,6 +6,7 @@ help:
 	@echo "Setup:"
 	@echo "  make venv              - Create virtual environment and install dependencies"
 	@echo "  make download_dataset  - Download and prepare the asthma detection dataset"
+	@echo "  make stage             - Transfer dataset to Snowflake stage"
 	@echo ""
 
 venv:
@@ -23,4 +24,8 @@ download_dataset:
 	@rm asthma-detection-dataset-version-2.zip
 	@echo "✅ Dataset downloaded and extracted to 'asthma_detection_dataset/'"
 
+stage:
+	@echo "🚀 Transferring audio files to Snowflake stage..."
+	@python -m backend.db.stage.create_audio_stage
+	@echo "✅ Files transferred successfully!"
 

@@ -5,4 +5,5 @@ asthma_detection_dataset/
 Des.txt
 *.zip
 
-.snowsql/
+__pycache__/
+*.pyc
