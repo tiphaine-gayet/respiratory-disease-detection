@@ -1,0 +1,16 @@
+-- 1. Création du Stage pour stocker les fichiers .wav de Kaggle
+CREATE STAGE IF NOT EXISTS STG_RESPIRATORY_SOUNDS
+DIRECTORY = (ENABLE = TRUE);
+
+-- 2. Table pour les métadonnées des patients et diagnostics
+CREATE TABLE IF NOT EXISTS RAW_RESPIRATORY_METADATA (
+    FILE_NAME STRING,
+    DIAGNOSIS STRING,        
+    DURATION_SECONDS FLOAT,
+    SAMPLE_RATE INT,
+    UPLOADED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+-- 3. Vue pour simplifier l'accès aux fichiers du stage
+CREATE OR REPLACE VIEW V_SOUND_FILES AS
+SELECT * FROM DIRECTORY(@STG_RESPIRATORY_SOUNDS);
