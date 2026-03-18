@@ -20,13 +20,16 @@ def deploy_training_sp():
 
     # Enregistrement de la Stored Procedure
     session.sproc.register_from_file(
-        file_path="scripts/train_logic.py", # Le fichier contenant l'IA
+        file_path="scripts/train_logic.py",
         func_name="train_respiratory_model",
         name="TRAIN_MODEL_SP",
+        return_type=StringType(),
+        input_types=[],
         is_permanent=True,
         replace=True,
-        stage_location="@STG_RESPIRATORY_SOUNDS", # Stockage du code
-        packages=["snowflake-snowpark-python", "scipy", "librosa", "torch", "numpy"] # Dépendances IA 
+        stage_location="@STG_RESPIRATORY_SOUNDS",
+        # Liste simplifiée et stable 
+        packages=["snowflake-snowpark-python", "scikit-learn", "pandas", "joblib"]
     )
     print("🚀 Stored Procedure d'entraînement déployée !")
 
