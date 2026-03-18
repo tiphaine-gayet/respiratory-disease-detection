@@ -32,6 +32,12 @@ This project uses automated checks on every push and pull request:
 
 !!! !!! All checks need to be passed in order to merge to main.
 
+You can activate local pre-commit checks with :
+
+```bash
+pre-commit install
+```
+
 ## Coding Guidelines
 
 - Write clear and readable code
