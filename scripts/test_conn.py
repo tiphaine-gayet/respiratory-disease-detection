@@ -1,39 +1,42 @@
 import snowflake.connector
 import os
 
-def deploy():
-    # Récupération des variables configurées sur GitHub
+def deploy_infrastructure():
+    # Récupération des variables injectées par le YAML
     db = os.getenv('SNOWFLAKE_DATABASE').upper()
-    wh = os.getenv('SNOWFLAKE_WAREHOUSE').upper()
-
-    conn = snowflake.connector.connect(
+    warehouse = os.getenv('SNOWFLAKE_WAREHOUSE').upper()
+    
+    ctx = snowflake.connector.connect(
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        role='ACCOUNTADMIN'
+        role='ACCOUNTADMIN' 
     )
-
+    
     try:
-        cur = conn.cursor()
-        # Préparation de l'environnement selon les variables Git
-        cur.execute(f"CREATE WAREHOUSE IF NOT EXISTS {wh} WITH WAREHOUSE_SIZE='XSMALL'")
-        cur.execute(f"USE WAREHOUSE {wh}")
-        cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
-        cur.execute(f"USE DATABASE {db}")
-        cur.execute("CREATE SCHEMA IF NOT EXISTS PUBLIC")
-        cur.execute("USE SCHEMA PUBLIC")
+        cs = ctx.cursor()
         
-        # Lecture et exécution du fichier de structure
-        with open('scripts/setup_tessan.sql', 'r') as f:
-            sql_commands = f.read().split(';')
-            for cmd in sql_commands:
-                if cmd.strip():
-                    cur.execute(cmd)
+        # Liste des commandes utilisant les f-strings pour injecter tes variables Git
+        commands = [
+            f"CREATE WAREHOUSE IF NOT EXISTS {warehouse} WITH WAREHOUSE_SIZE='XSMALL'",
+            f"USE WAREHOUSE {warehouse}",
+            f"CREATE DATABASE IF NOT EXISTS {db}",
+            f"USE DATABASE {db}",
+            "CREATE SCHEMA IF NOT EXISTS PUBLIC",
+            "CREATE STAGE IF NOT EXISTS STG_RESPIRATORY_SOUNDS DIRECTORY = (ENABLE = TRUE)",
+            """CREATE TABLE IF NOT EXISTS RAW_RESPIRATORY_METADATA (
+                FILE_NAME STRING, DIAGNOSIS STRING, DURATION_SECONDS FLOAT, 
+                SAMPLE_RATE INT, UPLOADED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+            )"""
+        ]
         
-        print(f"🚀 Infrastructure Tessan prête dans la base {db} !")
+        for cmd in commands:
+            cs.execute(cmd)
+            print(f"✅ Exécuté avec succès")
+            
     finally:
-        cur.close()
-        conn.close()
+        cs.close()
+        ctx.close()
 
 if __name__ == "__main__":
-    deploy()
+    deploy_infrastructure()
