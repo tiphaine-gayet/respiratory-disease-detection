@@ -2,7 +2,7 @@ name: Test Snowflake Connection
 
 on:
   push:
-    branches: [ exploration_devops ] # Se déclenche quand tu push sur main
+    branches: [ exploration_devops ]
 
 jobs:
   test-connection:
@@ -11,14 +11,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install SnowSQL
+        run: |
+          curl -O https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.28-linux_x86_64.bash
+          SNOWSQL_DEST=~/bin SNOWSQL_LOGIN_SHELL=~/.profile bash snowsql-1.2.28-linux_x86_64.bash
+
       - name: Execute SQL on Snowflake
-        uses: snowflake-labs/snowflake-action@v1.1.0
-        with:
-          account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          username: ${{ secrets.SNOWFLAKE_USERNAME }}
-          password: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          # On peut aussi préciser le rôle et le warehouse si nécessaire
-          role: ACCOUNTADMIN 
-          database: ${{ secrets.SNOWFLAKE_DATABASE }}
-          schema: PUBLIC
-          sql-file: ./scripts/test.sql
+        env:
+          SNOWSQL_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWSQL_USER: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWSQL_PWD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWSQL_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+          SNOWSQL_ROLE: ACCOUNTADMIN # Ou le rôle que tu utilises
+          SNOWSQL_WAREHOUSE: COMPUTE_WH # Ajoute ton warehouse ici
+        run: |
+          # On utilise l'exécutable installé pour lancer ton fichier SQL
+          ~/bin/snowsql -f ./scripts/test_connection.sql
