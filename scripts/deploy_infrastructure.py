@@ -18,6 +18,7 @@ def deploy():
         role='ACCOUNTADMIN'
     )
 
+    cur = None
     try:
         cur = conn.cursor()
         
@@ -42,7 +43,8 @@ def deploy():
         
         print(f"🚀 Infrastructure Tessan déployée avec succès !")
     finally:
-        cur.close()
+        if cur is not None:
+            cur.close()
         conn.close()
 
 if __name__ == "__main__":
