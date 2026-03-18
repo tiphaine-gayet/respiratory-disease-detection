@@ -28,4 +28,4 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_WAREHOUSE: COMPUTE_WH # Vérifie que ce nom est correct dans ton Snowflake
         run: |
-          python scripts/deploy_sql.py
+          python scripts/deploy_sql.sql
