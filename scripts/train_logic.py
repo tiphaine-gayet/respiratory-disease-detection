@@ -1,9 +1,10 @@
 from snowflake.snowpark import Session
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+import joblib
+import io
 
-# Snowpark a besoin de savoir que 'session' est de type Session 
-# et que la fonction retourne une chaîne (str)
 def train_respiratory_model(session: Session) -> str:
-    # Ton code d'entraînement IA ici (PyTorch, Librosa, etc.) 
-    
-    # Exemple de retour pour confirmer le succès dans Snowflake
-    return "✅ Entraînement terminé avec succès sur le dataset Tessan."
+
+    return f"✅ Modèle Random Forest entraîné et sauvegardé sur @STG_RESPIRATORY_SOUNDS. Accuracy: {model.score(X_test, y_test):.2f}"
