@@ -1,32 +1,42 @@
 import snowflake.connector
 import os
 
-def deploy_sql():
+def deploy_infrastructure():
+    # Récupération des variables injectées par le YAML
+    db = os.getenv('SNOWFLAKE_DATABASE').upper()
+    warehouse = os.getenv('SNOWFLAKE_WAREHOUSE').upper()
+    
     ctx = snowflake.connector.connect(
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        database=os.getenv('SNOWFLAKE_DATABASE'),
-        warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
-        role='ACCOUNTADMIN'
+        role='ACCOUNTADMIN' 
     )
     
     try:
         cs = ctx.cursor()
-        # Lecture du fichier SQL
-        with open('scripts/setup_tessan.sql', 'r') as f:
-            sql_commands = f.read().split(';')
-            
-        for command in sql_commands:
-            if command.strip():
-                cs.execute(command)
-                print(f"✅ Exécuté : {command[:50]}...")
-                
-        print("\n🚀 Infrastructure Tessan prête sur Snowflake !")
         
+        # Liste des commandes utilisant les f-strings pour injecter tes variables Git
+        commands = [
+            f"CREATE WAREHOUSE IF NOT EXISTS {warehouse} WITH WAREHOUSE_SIZE='XSMALL'",
+            f"USE WAREHOUSE {warehouse}",
+            f"CREATE DATABASE IF NOT EXISTS {db}",
+            f"USE DATABASE {db}",
+            "CREATE SCHEMA IF NOT EXISTS PUBLIC",
+            "CREATE STAGE IF NOT EXISTS STG_RESPIRATORY_SOUNDS DIRECTORY = (ENABLE = TRUE)",
+            """CREATE TABLE IF NOT EXISTS RAW_RESPIRATORY_METADATA (
+                FILE_NAME STRING, DIAGNOSIS STRING, DURATION_SECONDS FLOAT, 
+                SAMPLE_RATE INT, UPLOADED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+            )"""
+        ]
+        
+        for cmd in commands:
+            cs.execute(cmd)
+            print(f"✅ Exécuté avec succès")
+            
     finally:
         cs.close()
         ctx.close()
 
 if __name__ == "__main__":
-    deploy_sql()
+    deploy_infrastructure()
