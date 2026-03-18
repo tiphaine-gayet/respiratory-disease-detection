@@ -3,11 +3,11 @@ name: Manual Snowflake Deployment
 on:
   push:
     branches:
-      - '**' # Vérification de syntaxe sur toutes les branches
-  workflow_dispatch:
+      - '**'
+  workflow_dispatch: # Doit être au même niveau que 'push'
     inputs:
       confirm_deploy:
-        description: 'Taper "OUI" pour confirmer le déploiement'
+        description: 'Taper OUI pour confirmer'
         required: true
         default: 'NON'
 
