@@ -1,0 +1,24 @@
+name: Test Snowflake Connection
+
+on:
+  push:
+    branches: [ exploration_devops ] # Se déclenche quand tu push sur main
+
+jobs:
+  test-connection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Execute SQL on Snowflake
+        uses: snowflake-labs/snowflake-action@v1.1.0
+        with:
+          account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          username: ${{ secrets.SNOWFLAKE_USERNAME }}
+          password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          # On peut aussi préciser le rôle et le warehouse si nécessaire
+          role: ACCOUNTADMIN 
+          database: ${{ secrets.SNOWFLAKE_DATABASE }}
+          schema: PUBLIC
+          sql-file: ./scripts/test.sql
