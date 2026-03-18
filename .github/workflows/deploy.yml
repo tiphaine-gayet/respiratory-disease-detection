@@ -1,29 +1,47 @@
-name: Dynamic Deployment Pipeline
+name: Manual Snowflake Deployment
 
 on:
   push:
-    # Se déclenche sur toutes les branches (utile pour le dev)
     branches:
-      - '**' 
+      - '**' # On continue de tester le code sur chaque push
+  workflow_dispatch:
+    # Cette ligne active le bouton "Run workflow" dans l'onglet Actions
+    inputs:
+      confirm_deploy:
+        description: 'Taper "OUI" pour confirmer le déploiement sur Snowflake'
+        required: true
+        default: 'NON'
 
 jobs:
-  deploy:
+  # Étape 1 : Vérification du code (S'exécute toujours au push)
+  lint-and-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
       - name: Install dependencies
         run: pip install snowflake-connector-python
+      - name: Syntax Check
+        run: python -m py_compile scripts/deploy_infrastructure.py
 
+  # Étape 2 : Déploiement Réel (S'exécute UNIQUEMENT manuellement)
+  deploy-snowflake:
+    needs: lint-and-check
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_deploy == 'OUI'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install snowflake-connector-python
       - name: Deploy Infrastructure
         env:
-          # On ne garde QUE les secrets ici
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
