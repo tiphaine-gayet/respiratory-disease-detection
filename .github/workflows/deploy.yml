@@ -1,0 +1,58 @@
+name: Manual Snowflake Deployment
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch: # Doit être au même niveau que 'push'
+    inputs:
+      confirm_deploy:
+        description: 'Taper OUI pour confirmer'
+        required: true
+        default: 'NON'
+
+env:
+  # Force GitHub à utiliser Node 24 pour toutes les actions (v4, v5, etc.)
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  lint-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install snowflake-connector-python
+
+      - name: Syntax Check
+        run: python -m py_compile scripts/deploy_infrastructure.py
+
+  deploy-snowflake:
+    needs: lint-and-check
+    # Sécurité : exécution manuelle uniquement avec confirmation "OUI"
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_deploy == 'OUI'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install snowflake-connector-python
+
+      - name: Deploy Infrastructure
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: python scripts/deploy_infrastructure.py
