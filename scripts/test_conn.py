@@ -3,36 +3,46 @@ import os
 
 def run_test():
     # Récupération des variables
-    db = os.getenv('SNOWFLAKE_DATABASE')
-    schema = 'PUBLIC'
+    # On force en majuscules au cas où
+    db = os.getenv('SNOWFLAKE_DATABASE', 'TESSAN_HACKATHON').upper()
+    warehouse = os.getenv('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH').upper()
     
     ctx = snowflake.connector.connect(
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        warehouse=os.getenv('SNOWFLAKE_WAREHOUSE'),
-        role='ACCOUNTADMIN'
+        role='ACCOUNTADMIN' # On reste en ACCOUNTADMIN pour le setup
     )
     
     try:
         cs = ctx.cursor()
         
-        # On force l'utilisation de la DB et du Schéma 
-        cs.execute(f"USE DATABASE {db}")
-        cs.execute(f"USE SCHEMA {schema}")
+        # 1. Vérification/Création du Warehouse
+        cs.execute(f"CREATE WAREHOUSE IF NOT EXISTS {warehouse}")
+        cs.execute(f"USE WAREHOUSE {warehouse}")
         
-        # Création de la table avec le nom complet
-        cs.execute(f"""
-            CREATE TABLE IF NOT EXISTS {db}.{schema}.HACKATHON_LOG (
+        # 2. Vérification/Création de la Database
+        cs.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
+        cs.execute(f"USE DATABASE {db}")
+        
+        # 3. Création du schéma et de la table
+        cs.execute("CREATE SCHEMA IF NOT EXISTS PUBLIC")
+        cs.execute("USE SCHEMA PUBLIC")
+        
+        cs.execute("""
+            CREATE TABLE IF NOT EXISTS HACKATHON_LOG (
                 ID INT IDENTITY(1,1),
                 MESSAGE STRING,
                 CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
             )
         """)
         
-        cs.execute(f"INSERT INTO {db}.{schema}.HACKATHON_LOG (MESSAGE) VALUES ('Test réussi avec DATABASE explicite !')")
-        print(f"✅ Succès : Table mise à jour dans {db}.{schema}")
+        cs.execute("INSERT INTO HACKATHON_LOG (MESSAGE) VALUES ('Connexion et création auto réussies !')")
+        print(f"✅ Succès total dans la base {db} !")
         
+    except Exception as e:
+        print(f"❌ Erreur détectée : {e}")
+        raise e
     finally:
         cs.close()
         ctx.close()
