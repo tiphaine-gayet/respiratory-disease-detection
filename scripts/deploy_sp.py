@@ -1,6 +1,7 @@
 # scripts/deploy_sp.py
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import sproc
+from snowflake.snowpark.types import StringType
 import os
 import json
 
