@@ -4,3 +4,5 @@ venv/
 asthma_detection_dataset/
 Des.txt
 *.zip
+
+.snowsql/
