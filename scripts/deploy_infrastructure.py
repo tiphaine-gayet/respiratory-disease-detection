@@ -7,7 +7,10 @@ def deploy():
     with open('config/snowflake_config.json', 'r') as f:
         config = json.load(f)
 
-    # 2. Connexion via Secrets (Identifiants)
+    db = config['database'].upper()
+    wh = config['warehouse'].upper()
+
+    # 2. Connexion
     conn = snowflake.connector.connect(
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
@@ -17,10 +20,8 @@ def deploy():
 
     try:
         cur = conn.cursor()
-        db = config['database'].upper()
-        wh = config['warehouse'].upper()
-
-        # Configuration de l'environnement
+        
+        # 3. Setup initial (Python injecte les variables ici)
         cur.execute(f"CREATE WAREHOUSE IF NOT EXISTS {wh} WITH WAREHOUSE_SIZE='XSMALL'")
         cur.execute(f"USE WAREHOUSE {wh}")
         cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
@@ -28,15 +29,18 @@ def deploy():
         cur.execute(f"CREATE SCHEMA IF NOT EXISTS {config['schema']}")
         cur.execute(f"USE SCHEMA {config['schema']}")
         
-        # Lecture et exécution du SQL
+        # 4. Lecture du fichier SQL et remplacement des variables
         with open('scripts/setup_tessan.sql', 'r') as f:
-            sql_commands = f.read().split(';')
+            content = f.read()
+            # On remplace les placeholders par les vraies valeurs
+            content = content.replace('{db}', db).replace('{warehouse}', wh)
+            
+            sql_commands = content.split(';')
             for cmd in sql_commands:
                 if cmd.strip():
-                    # On peut même faire du remplacement dynamique ici si besoin
                     cur.execute(cmd)
         
-        print(f"🚀 Infrastructure déployée dans {db} via fichier de config !")
+        print(f"🚀 Infrastructure Tessan déployée avec succès !")
     finally:
         cur.close()
         conn.close()
