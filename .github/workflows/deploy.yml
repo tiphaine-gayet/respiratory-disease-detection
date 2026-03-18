@@ -1,0 +1,30 @@
+name: Dynamic Deployment Pipeline
+
+on:
+  push:
+    # Se déclenche sur toutes les branches (utile pour le dev)
+    branches:
+      - '**' 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install snowflake-connector-python
+
+      - name: Deploy Infrastructure
+        env:
+          # On ne garde QUE les secrets ici
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: python scripts/deploy_infrastructure.py
