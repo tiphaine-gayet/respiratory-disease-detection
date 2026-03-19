@@ -6,7 +6,6 @@ from snowflake.snowpark import Session
 from snowflake.snowpark.types import StringType, StructType, StructField, IntegerType, FloatType
 from pathlib import Path
 import os
-import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,19 +13,15 @@ load_dotenv()
 
 def deploy_metadata_udf():
     """Deploy extract_metadata as a Snowflake UDF."""
-    
-    # Load configuration
-    with open('config/snowflake_config.json', 'r') as f:
-        config = json.load(f)
 
     # Create Snowpark session
     session = Session.builder.configs({
         "account": os.getenv("SNOWFLAKE_ACCOUNT"),
         "user": os.getenv("SNOWFLAKE_USERNAME"),
         "password": os.getenv("SNOWFLAKE_PASSWORD"),
-        "database": config.get("database"),
-        "schema": config.get("schema", "PUBLIC"),
-        "warehouse": config.get("warehouse", "COMPUTE_WH")
+        "database": os.getenv("SNOWFLAKE_DATABASE"),
+        "schema": os.getenv("SNOWFLAKE_PUBLIC_SCHEMA"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE")
     }).create()
 
     # Define the UDF return type (struct matching extract_metadata output)
