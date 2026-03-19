@@ -55,7 +55,7 @@ def deploy_metadata_udf():
         is_permanent=True,
         replace=True,
         stage_location="@STG_RESPIRATORY_SOUNDS",
-        packages=["scipy", "numpy"]
+        packages=["scipy", "numpy","librosa","python-dotenv","snowflake-snowpark-python"]
     )
     
     print("✅ UDF 'EXTRACT_AUDIO_METADATA' deployed successfully!")

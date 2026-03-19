@@ -6,7 +6,9 @@ Based on pipeline.ipynb's extract_metadata function.
 # TODO: refactor to use Snowflake stage files instead of local files (will require changes to extract_metadata to read from stage instead of local path)
 
 from pathlib import Path
-from scipy.io import wavfile
+import numpy as np
+import librosa
+from ...utils.snowflake_client import SnowflakeClient
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
@@ -45,13 +47,10 @@ def create_metadata_table(client):
 def extract_metadata(filepath):
     """Extract audio metadata - returns dict with all properties and error handling."""
     try:
-        sr, y = wavfile.read(filepath)  # sr=sample rate, y=audio data
-        duration = len(y) / sr  # Calculate duration from samples and sample rate
-        # Calculate amplitude max without numpy
-        amplitude = float(max(abs(sample) for sample in y))
-        # Calculate RMS without numpy: sqrt(mean(y^2))
-        mean_square = sum(sample**2 for sample in y) / len(y)
-        rms = float(mean_square ** 0.5)
+        y, sr = librosa.load(filepath, sr=None)  # sr=None → sample rate original
+        duration = librosa.get_duration(y=y, sr=sr)
+        amplitude = float(np.max(np.abs(y)))
+        rms = float(np.sqrt(np.mean(y**2)))
         return {
             'sample_rate': sr,
             'duration_s': round(duration, 3),
@@ -110,7 +109,6 @@ def ingest_metadata(client):
 
 
 if __name__ == "__main__":
-    from backend.utils.snowflake_client import SnowflakeClient
     print("🚀 Ingesting audio metadata to Snowflake...")
     with SnowflakeClient() as client:
         create_metadata_table(client)
