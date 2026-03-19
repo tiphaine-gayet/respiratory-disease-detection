@@ -47,3 +47,8 @@ tqdm==4.67.3
 typing_extensions==4.15.0
 urllib3==2.6.3
 webencodings==0.5.1
+snowflake-connector-python==3.7.0
+snowflake-sqlalchemy==1.9.0
+python-dotenv==1.0.0
+pandas>=2.0
+pre-commit==3.7.1
