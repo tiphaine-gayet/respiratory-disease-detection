@@ -18,9 +18,6 @@ USE SCHEMA {db}.PUBLIC;
 CREATE SCHEMA IF NOT EXISTS RAW;
 USE SCHEMA {db}.RAW;
 
-CREATE SCHEMA IF NOT EXISTS TRAINING;
-USE SCHEMA {db}.TRAINING;
-
 -- 4. Création du Stage Interne pour les fichiers audio .wav [cite: 64, 65]
 -- On active le DIRECTORY pour que Streamlit puisse lister les sons plus tard [cite: 112, 114]
 -- Création du Stage pour les sons respiratoires [cite: 31, 51]
@@ -35,3 +32,6 @@ CREATE TABLE IF NOT EXISTS RAW_RESPIRATORY_METADATA (
     SAMPLE_RATE INT,
     UPLOADED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
 );
+
+CREATE SCHEMA IF NOT EXISTS TRAINING;
+USE SCHEMA {db}.TRAINING;
