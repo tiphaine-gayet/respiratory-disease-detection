@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install snowflake-connector-python
+        run: pip install snowflake-connector-python python-dotenv
 
 
       - name: Syntax Check
@@ -49,7 +49,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install snowflake-connector-python
+        run: pip install snowflake-connector-python python-dotenv
 
       - name: Install Snowflake Snowpark
         run: pip install snowflake-snowpark-python python-dotenv numpy
