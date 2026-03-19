@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pip install snowflake-connector-python
 
+      - name: Install Snowflake Snowpark
+        run: pip install snowflake-snowpark-python
+
       - name: Syntax Check
         run: python -m py_compile cicd/devops/deploy_infrastructure.py
 
