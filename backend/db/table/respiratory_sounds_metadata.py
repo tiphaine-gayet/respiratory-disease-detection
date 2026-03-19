@@ -1,8 +1,12 @@
 """
 Extract audio metadata from dataset and ingest into Snowflake table.
+Based on pipeline.ipynb's extract_metadata function.
 """
 
+# TODO: refactor to use Snowflake stage files instead of local files (will require changes to extract_metadata to read from stage instead of local path)
+
 from pathlib import Path
+import numpy as np
 import librosa
 from ...utils.snowflake_client import SnowflakeClient
 
@@ -13,12 +17,13 @@ DATABASE = "TESSAN_HACKATHON"
 SCHEMA = "DATASETS"
 TABLE = "RESPIRATORY_SOUNDS_METADATA"
 
+
 FOLDERS = {
-    "asthma": "asthma",
-    "Bronchial": "bronchial",
-    "copd": "copd",
-    "healthy": "healthy",
-    "pneumonia": "pneumonia",
+    "asthma": "Asthma",
+    "Bronchial": "Bronchial",
+    "copd": "COPD",
+    "healthy": "Healthy",
+    "pneumonia": "Pneumonia",
 }
 
 
@@ -29,56 +34,78 @@ def create_metadata_table(client):
             file_name VARCHAR,
             class VARCHAR,
             sample_rate INTEGER,
-            duration_seconds FLOAT,
+            duration_s FLOAT,
+            n_samples INTEGER,
+            amplitude_max FLOAT,
+            rms FLOAT,
             PRIMARY KEY (file_name)
         )
     """)
     print(f"✅ Table {DATABASE}.{SCHEMA}.{TABLE} created (if not exists).")
 
 
-def extract_metadata(audio_path: Path) -> dict:
-    """Extract metadata from an audio file."""
-    y, sr = librosa.load(str(audio_path), sr=None)
-    duration = librosa.get_duration(y=y, sr=sr)
-    return {
-        "sample_rate": sr,
-        "duration_seconds": duration,
-    }
+def extract_metadata(filepath):
+    """Extract audio metadata - returns dict with all properties and error handling."""
+    try:
+        y, sr = librosa.load(filepath, sr=None)  # sr=None → sample rate original
+        duration = librosa.get_duration(y=y, sr=sr)
+        amplitude = float(np.max(np.abs(y)))
+        rms = float(np.sqrt(np.mean(y**2)))
+        return {
+            'sample_rate': sr,
+            'duration_s': round(duration, 3),
+            'n_samples': len(y),
+            'amplitude_max': round(amplitude, 4),
+            'rms': round(rms, 6),
+            'error': None
+        }
+    except Exception as e:
+        return {
+            'sample_rate': None, 'duration_s': None,
+            'n_samples': None, 'amplitude_max': None,
+            'rms': None, 'error': str(e)
+        }
 
 
 def ingest_metadata(client):
     """Read audio files and ingest metadata into Snowflake."""
     rows_inserted = 0
+    rows_error = 0
 
-    for class_name, folder_path in FOLDERS.items():
-        audio_dir = DATASET_ROOT / folder_path
+    for folder_name, class_label in FOLDERS.items():
+        audio_dir = DATASET_ROOT / folder_name
 
         if not audio_dir.exists():
             print(f"⚠️  Directory not found: {audio_dir}")
             continue
 
         audio_files = list(audio_dir.glob("*.wav"))
-        print(f"📁 Found {len(audio_files)} files in {class_name}/")
+        print(f"📁 Found {len(audio_files)} files in {folder_name}/")
 
         for audio_file in audio_files:
-            try:
-                metadata = extract_metadata(audio_file)
+            metadata = extract_metadata(str(audio_file))
 
-                # Insert into table
-                client.execute(f"""
-                    INSERT INTO {DATABASE}.{SCHEMA}.{TABLE}
-                    (file_name, class, sample_rate, duration_seconds)
-                    VALUES ('{audio_file.name}', '{class_name}', {metadata['sample_rate']}, {metadata['duration_seconds']})
-                """)
+            if metadata['error'] is not None:
+                print(f"❌ Error processing {audio_file.name}: {metadata['error']}")
+                rows_error += 1
+                continue
 
-                rows_inserted += 1
-                if rows_inserted % 50 == 0:
-                    print(f"   ✓ Ingested {rows_inserted} files...")
+            # Insert into table
+            client.execute(f"""
+                INSERT INTO {DATABASE}.{SCHEMA}.{TABLE}
+                (file_name, class, sample_rate, duration_s, n_samples, amplitude_max, rms)
+                VALUES ('{audio_file.name}', '{class_label}', {metadata['sample_rate']},
+                        {metadata['duration_s']}, {metadata['n_samples']},
+                        {metadata['amplitude_max']}, {metadata['rms']})
+            """)
 
-            except Exception as e:
-                print(f"❌ Error processing {audio_file.name}: {e}")
+            rows_inserted += 1
+            if rows_inserted % 100 == 0:
+                print(f"   ✓ Ingested {rows_inserted} files...")
 
-    print(f"✅ Ingested {rows_inserted} audio metadata records.")
+    print(f"\n✅ Ingested {rows_inserted} audio metadata records.")
+    if rows_error > 0:
+        print(f"⚠️  {rows_error} files had errors and were skipped.")
 
 
 if __name__ == "__main__":

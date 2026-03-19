@@ -27,11 +27,9 @@ download_dataset:
 
 stage:
 	@echo "🚀 Transferring audio files to Snowflake stage..."
-	@python -m backend.db.stage.create_audio_stage
+	@python -m backend.db.stage.stg_respiratory_sounds
 	@echo "✅ Files transferred successfully!"
-
-ingest:
-	@echo "🚀 Ingesting audio metadata to Snowflake..."
-	@python -m backend.db.ingest.ingest_audio_metadata
+	@echo "🚀 Extract audio..."
+	@python -m backend.db.table.respiratory_sounds_metadata
 	@echo "✅ Metadata ingested successfully!"
 
