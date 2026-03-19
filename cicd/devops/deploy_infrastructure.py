@@ -12,9 +12,11 @@ def deploy():
 
     # 2. Connexion
     conn = snowflake.connector.connect(
-        user=os.getenv('SNOWFLAKE_USERNAME'),
-        password=os.getenv('SNOWFLAKE_PASSWORD'),
+        user=os.getenv('SNOWFLAKE_USER'),
+        password=os.getenv('SNOWFLAKE_TOKEN'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
+        warehouse=wh,
+        database=db,
         role='ACCOUNTADMIN'
     )
 
