@@ -59,8 +59,8 @@ jobs:
         run: python cicd/devops/deploy_infrastructure.py
 
       - name: Install Snowflake Snowpark
-        run: pip install snowflake-snowpark-python
-        
+        run: pip install snowflake-snowpark-python python-dotenv
+
       - name: Deploy UDF Metadata
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
