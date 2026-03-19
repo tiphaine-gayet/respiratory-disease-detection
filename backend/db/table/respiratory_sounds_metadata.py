@@ -7,12 +7,16 @@ Based on pipeline.ipynb's extract_metadata function.
 
 from pathlib import Path
 from scipy.io import wavfile
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
 
-DATABASE = "TESSAN_HACKATHON"
-SCHEMA = "DATASETS"
+DATABASE = os.getenv("SNOWFLAKE_DATABASE")
+SCHEMA = os.getenv("SNOWFLAKE_RAW_SCHEMA")
 TABLE = "RESPIRATORY_SOUNDS_METADATA"
 
 
