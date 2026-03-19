@@ -3,8 +3,8 @@ Deploy the extract_metadata function as a Snowflake UDF (User Defined Function).
 """
 
 from snowflake.snowpark import Session
-from snowflake.snowpark.functions import udf
 from snowflake.snowpark.types import StringType, StructType, StructField, IntegerType, FloatType
+from pathlib import Path
 import os
 import json
 from dotenv import load_dotenv
@@ -39,9 +39,13 @@ def deploy_metadata_udf():
         StructField("error", StringType(), nullable=True),
     ])
 
+    # Compute correct file path relative to script location
+    script_dir = Path(__file__).parent
+    file_path = script_dir / "../../backend/db/table/respiratory_sounds_metadata.py"
+    
     # Register the UDF from the Python file
     session.udf.register_from_file(
-        file_path="../../backend/db/table/respiratory_sounds_metadata.py",
+        file_path=str(file_path.resolve()),
         func_name="extract_metadata",
         name="EXTRACT_AUDIO_METADATA",
         return_type=return_type,
@@ -49,7 +53,7 @@ def deploy_metadata_udf():
         is_permanent=True,
         replace=True,
         stage_location="@STG_RESPIRATORY_SOUNDS",
-        packages=["librosa", "numpy", "scikit-learn","snowflake-snowpark-python"]
+        packages=["librosa", "numpy", "scikit-learn"]
     )
     
     print("✅ UDF 'EXTRACT_AUDIO_METADATA' deployed successfully!")
