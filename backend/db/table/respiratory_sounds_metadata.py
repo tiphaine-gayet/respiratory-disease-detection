@@ -7,15 +7,6 @@ Based on pipeline.ipynb's extract_metadata function.
 
 from pathlib import Path
 from scipy.io import wavfile
-import sys
-
-# Handle both direct execution and module import
-try:
-    from backend.utils.snowflake_client import SnowflakeClient
-except ImportError:
-    # When run directly, add parent directories to path
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-    from backend.utils.snowflake_client import SnowflakeClient
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
@@ -119,6 +110,7 @@ def ingest_metadata(client):
 
 
 if __name__ == "__main__":
+    from backend.utils.snowflake_client import SnowflakeClient
     print("🚀 Ingesting audio metadata to Snowflake...")
     with SnowflakeClient() as client:
         create_metadata_table(client)
