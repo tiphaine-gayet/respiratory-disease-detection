@@ -52,7 +52,7 @@ jobs:
         run: pip install snowflake-connector-python
 
       - name: Install Snowflake Snowpark
-        run: pip install snowflake-snowpark-python python-dotenv
+        run: pip install snowflake-snowpark-python python-dotenv numpy scipy
 
       - name: Deploy Infrastructure
         env:
