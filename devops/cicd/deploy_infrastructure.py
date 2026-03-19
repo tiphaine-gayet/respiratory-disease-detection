@@ -1,14 +1,15 @@
 import snowflake.connector
 import os
-import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def deploy():
-    # 1. Charger la config partagée
-    with open('config/snowflake_config.json', 'r') as f:
-        config = json.load(f)
 
-    db = config['database'].upper()
-    wh = config['warehouse'].upper()
+
+    db = os.getenv('SNOWFLAKE_DATABASE')
+    wh = os.getenv('SNOWFLAKE_WAREHOUSE')
 
     # 2. Connexion
     conn = snowflake.connector.connect(
@@ -27,8 +28,8 @@ def deploy():
         cur.execute(f"USE WAREHOUSE {wh}")
         cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
         cur.execute(f"USE DATABASE {db}")
-        cur.execute(f"CREATE SCHEMA IF NOT EXISTS {config['schema']}")
-        cur.execute(f"USE SCHEMA {config['schema']}")
+        cur.execute(f"CREATE SCHEMA IF NOT EXISTS {os.getenv('SNOWFLAKE_RAW_SCHEMA')}")
+        cur.execute(f"USE SCHEMA {os.getenv('SNOWFLAKE_RAW_SCHEMA')}")
         
         # 4. Lecture du fichier SQL et remplacement des variables
         with open('devops/cicd/setup_tessan.sql', 'r') as f:

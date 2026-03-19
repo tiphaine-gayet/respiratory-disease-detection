@@ -1,9 +1,0 @@
-{
-  "database": "DB_TEST",
-  "warehouse": "COMPUTE_WH",
-  "schema": "PUBLIC",
-  "stage_name": "STG_RESPIRATORY_SOUNDS",
-  "tables": {
-    "metadata": "RAW_RESPIRATORY_METADATA"
-  }
-}
