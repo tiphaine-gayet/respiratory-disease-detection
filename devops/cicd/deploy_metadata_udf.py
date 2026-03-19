@@ -20,7 +20,7 @@ def deploy_metadata_udf():
         "user": os.getenv("SNOWFLAKE_USERNAME"),
         "password": os.getenv("SNOWFLAKE_PASSWORD"),
         "database": os.getenv("SNOWFLAKE_DATABASE"),
-        "schema": os.getenv("SNOWFLAKE_PUBLIC_SCHEMA"),
+        "schema": os.getenv("SNOWFLAKE_RAW_SCHEMA"),
         "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE")
     }).create()
 
