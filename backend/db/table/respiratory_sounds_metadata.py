@@ -7,7 +7,7 @@ Based on pipeline.ipynb's extract_metadata function.
 
 from pathlib import Path
 import numpy as np
-import librosa
+from scipy.io import wavfile
 from ...utils.snowflake_client import SnowflakeClient
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
