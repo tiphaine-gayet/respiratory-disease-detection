@@ -31,7 +31,7 @@ def deploy():
         cur.execute(f"USE SCHEMA {config['schema']}")
         
         # 4. Lecture du fichier SQL et remplacement des variables
-        with open('cicd/devops/setup_tessan.sql', 'r') as f:
+        with open('devops/cicd/setup_tessan.sql', 'r') as f:
             content = f.read()
             # On remplace les placeholders par les vraies valeurs
             content = content.replace('{db}', db).replace('{warehouse}', wh)

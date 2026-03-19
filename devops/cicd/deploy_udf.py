@@ -1,4 +1,4 @@
-# cicd/devops/deploy_sp.py
+# devops/cicd/deploy_sp.py
 from snowflake.snowpark import Session
 from snowflake.snowpark.functions import sproc
 from snowflake.snowpark.types import StringType
@@ -21,7 +21,7 @@ def deploy_training_sp():
 
     # Enregistrement de la Stored Procedure
     session.sproc.register_from_file(
-        file_path="cicd/devops/train_logic.py",
+        file_path="devops/cicd/train_logic.py",
         func_name="train_respiratory_model",
         name="TRAIN_MODEL_SP",
         return_type=StringType(),
