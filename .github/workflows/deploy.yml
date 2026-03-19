@@ -56,3 +56,10 @@ jobs:
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: python cicd/devops/deploy_infrastructure.py
+      
+      - name: Deploy UDF Metadata
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: python cicd/devops/deploy_metadata_udf.py
