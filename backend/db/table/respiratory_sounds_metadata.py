@@ -11,7 +11,7 @@ import sys
 
 # Handle both direct execution and module import
 try:
-    from ...utils.snowflake_client import SnowflakeClient
+    from backend.utils.snowflake_client import SnowflakeClient
 except ImportError:
     # When run directly, add parent directories to path
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
