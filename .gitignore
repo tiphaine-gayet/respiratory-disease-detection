@@ -4,3 +4,8 @@ venv/
 asthma_detection_dataset/
 Des.txt
 *.zip
+
+__pycache__/
+*.pyc
+
+.DS_Store
