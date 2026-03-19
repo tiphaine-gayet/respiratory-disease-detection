@@ -30,8 +30,6 @@ jobs:
       - name: Install dependencies
         run: pip install snowflake-connector-python
 
-      - name: Install Snowflake Snowpark
-        run: pip install snowflake-snowpark-python
 
       - name: Syntax Check
         run: python -m py_compile cicd/devops/deploy_infrastructure.py
@@ -59,7 +57,10 @@ jobs:
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: python cicd/devops/deploy_infrastructure.py
-      
+
+      - name: Install Snowflake Snowpark
+        run: pip install snowflake-snowpark-python
+        
       - name: Deploy UDF Metadata
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}

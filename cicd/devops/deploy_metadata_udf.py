@@ -22,10 +22,10 @@ def deploy_metadata_udf():
     # Create Snowpark session
     session = Session.builder.configs({
         "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-        "user": os.getenv("SNOWFLAKE_USER"),
-        "password": os.getenv("SNOWFLAKE_TOKEN"),
-        "database": config.get("database", "TESSAN_HACKATHON"),
-        "schema": config.get("schema", "DATASETS"),
+        "user": os.getenv("SNOWFLAKE_USERNAME"),
+        "password": os.getenv("SNOWFLAKE_PASSWORD"),
+        "database": config.get("database"),
+        "schema": config.get("schema", "PUBLIC"),
         "warehouse": config.get("warehouse", "COMPUTE_WH")
     }).create()
 
