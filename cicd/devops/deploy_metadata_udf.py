@@ -43,6 +43,8 @@ def deploy_metadata_udf():
     script_dir = Path(__file__).parent
     file_path = script_dir / "../../backend/db/table/respiratory_sounds_metadata.py"
     
+    session.custom_package_usage_config = {"enabled": True}
+
     # Register the UDF from the Python file
     session.udf.register_from_file(
         file_path=str(file_path.resolve()),
@@ -53,7 +55,7 @@ def deploy_metadata_udf():
         is_permanent=True,
         replace=True,
         stage_location="@STG_RESPIRATORY_SOUNDS",
-        packages=["librosa", "numpy", "scikit-learn"]
+        packages=["snowflake-snowpark-python", "librosa", "numpy", "scikit-learn"]
     )
     
     print("✅ UDF 'EXTRACT_AUDIO_METADATA' deployed successfully!")
