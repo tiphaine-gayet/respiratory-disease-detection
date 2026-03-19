@@ -12,11 +12,9 @@ def deploy():
 
     # 2. Connexion
     conn = snowflake.connector.connect(
-        user=os.getenv('SNOWFLAKE_USER'),
-        password=os.getenv('SNOWFLAKE_TOKEN'),
+        user=os.getenv('SNOWFLAKE_USERNAME'),
+        password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        warehouse=wh,
-        database=db,
         role='ACCOUNTADMIN'
     )
 
@@ -33,7 +31,7 @@ def deploy():
         cur.execute(f"USE SCHEMA {config['schema']}")
         
         # 4. Lecture du fichier SQL et remplacement des variables
-        with open('cicd/devops/setup_tessan.sql', 'r') as f:
+        with open('scripts/setup_tessan.sql', 'r') as f:
             content = f.read()
             # On remplace les placeholders par les vraies valeurs
             content = content.replace('{db}', db).replace('{warehouse}', wh)
