@@ -5,7 +5,7 @@ from snowflake.snowpark.types import StringType
 import os
 import json
 
-def deploy_training_sp():
+def deploy_PROCESSED_sp():
     # Connexion via Snowpark
     with open('config/snowflake_config.json', 'r') as f:
         config = json.load(f)
@@ -35,4 +35,4 @@ def deploy_training_sp():
     print("🚀 Stored Procedure d'entraînement déployée !")
 
 if __name__ == "__main__":
-    deploy_training_sp()
+    deploy_PROCESSED_sp()

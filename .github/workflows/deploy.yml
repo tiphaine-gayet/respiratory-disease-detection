@@ -62,7 +62,7 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_RAW_SCHEMA: ${{ vars.SNOWFLAKE_RAW_SCHEMA }}
-          SNOWFLAKE_TRAINING_SCHEMA: ${{ vars.SNOWFLAKE_TRAINING_SCHEMA }}
+          SNOWFLAKE_PROCESSED_SCHEMA: ${{ vars.SNOWFLAKE_PROCESSED_SCHEMA }}
           SNOWFLAKE_PUBLIC_SCHEMA: ${{ vars.SNOWFLAKE_PUBLIC_SCHEMA }}
         run: python devops/cicd/deploy_infrastructure.py
 
@@ -74,6 +74,6 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_RAW_SCHEMA: ${{ vars.SNOWFLAKE_RAW_SCHEMA }}
-          SNOWFLAKE_TRAINING_SCHEMA: ${{ vars.SNOWFLAKE_TRAINING_SCHEMA }}
+          SNOWFLAKE_PROCESSED_SCHEMA: ${{ vars.SNOWFLAKE_PROCESSED_SCHEMA }}
           SNOWFLAKE_PUBLIC_SCHEMA: ${{ vars.SNOWFLAKE_PUBLIC_SCHEMA }}
         run: python devops/cicd/deploy_metadata_udf.py
