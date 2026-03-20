@@ -86,7 +86,7 @@ def bandpass_filter(signal, sr, lowcut=BANDPASS_LOW, highcut=BANDPASS_HIGH):
     Filtre passe-bande Butterworth ordre 4 : 100-2000 Hz.
     - Supprime < 100 Hz  : vibrations stéthoscope, bruits de manipulation
     - Supprime > 2000 Hz : bruit électronique, respiration du soignant
-    Appliqué sur signal numpy 1D APRÈS trim, AVANT pad/crop.
+    Appliqué sur signal numpy 1D avant trim et pad/crop.
     """
     nyquist = sr / 2
     low = lowcut / nyquist
@@ -98,8 +98,8 @@ def bandpass_filter(signal, sr, lowcut=BANDPASS_LOW, highcut=BANDPASS_HIGH):
 def process_one_file(local_path, file_name, class_name):
     """
     Ordre des étapes :
-      1. Trim silence
-      2. Filtre passe-bande
+      1. Filtre passe-bande
+      2. Trim silence
       3. Pad / crop
     """
     audio, sr = librosa.load(local_path, sr=None)
@@ -110,9 +110,11 @@ def process_one_file(local_path, file_name, class_name):
         audio = librosa.resample(audio, orig_sr=sr, target_sr=TARGET_SR)
         sr = TARGET_SR
 
-    # --- Étape 1 : trim silence ---
+    # --- Étape 1 : filtre passe-bande ---
+    filtered = bandpass_filter(audio, sr)
 
-    trimmed, leading_silence_s = trim_leading_silence(audio, sr)
+    # --- Étape 2 : trim silence ---
+    trimmed, leading_silence_s = trim_leading_silence(filtered, sr)
     stripped_duration = len(trimmed) / sr
 
     if stripped_duration < MIN_DURATION_S:
@@ -131,20 +133,18 @@ def process_one_file(local_path, file_name, class_name):
             None,
         )
 
-    # --- Étape 2 : filtre passe-bande ---
-    filtered = bandpass_filter(trimmed, sr)
 
     # --- Étape 3 : pad / crop  ---
-    padded = pad_or_crop(filtered, sr)
+    padded = pad_or_crop(trimmed, sr)
     final_duration = len(padded) / sr
 
     # Déterminer l'action
     target_samples = int(TARGET_DURATION_S * sr)
-    if leading_silence_s == 0 and len(filtered) >= target_samples:
+    if leading_silence_s == 0 and len(trimmed) >= target_samples:
         action = "TRIMMED_TO_TARGET"
     elif leading_silence_s == 0:
         action = "PADDED"
-    elif len(filtered) >= target_samples:
+    elif len(trimmed) >= target_samples:
         action = "STRIPPED_AND_TRIMMED"
     else:
         action = "PROCESSED"
@@ -217,7 +217,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
             try:
                 padded, sr, mod, meta = process_one_file(
-                    local_path, file_name, class_name, row["DURATION_S"]
+                    local_path, file_name, class_name
                 )
                 modifications.append(mod)
 
@@ -240,12 +240,15 @@ with tempfile.TemporaryDirectory() as tmpdir:
                 )
 
         for f in os.listdir(class_dst):
-            session.file.put(
-                os.path.join(class_dst, f),
-                f"{TARGET_STAGE}/{subdir}",
-                auto_compress=False,
-                overwrite=True,
-            )
+            try:
+                session.file.put(
+                    os.path.join(class_dst, f),
+                    f"{TARGET_STAGE}/{subdir}",
+                    auto_compress=False,
+                    overwrite=True
+                )
+            except Exception as e:
+                print(f"❌ Upload failed for {f}: {e}")
         print(f"  {class_name}: {len(os.listdir(class_dst))} files uploaded")
 
 modifications_df = pd.DataFrame(modifications)
