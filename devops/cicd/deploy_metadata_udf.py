@@ -36,7 +36,7 @@ def deploy_metadata_udf():
 
     # Compute correct file path relative to script location
     script_dir = Path(__file__).parent
-    file_path = script_dir / "../../backend/db/table/respiratory_sounds_metadata.py"
+    file_path = script_dir / "../../backend/infra/raw/respiratory_sounds_metadata.py"
     
     session.custom_package_usage_config = {"enabled": True}
 
