@@ -12,7 +12,7 @@ from scipy.io import wavfile
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
 
-DATABASE = "TESSAN_HACKATHON"
+DATABASE = "M2_ISD_EQUIPE_1_DB"
 SCHEMA = "RAW"
 TABLE = "RESPIRATORY_SOUNDS_METADATA"
 
