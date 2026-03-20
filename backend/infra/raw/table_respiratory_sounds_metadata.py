@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
 
 DATABASE = os.getenv("SNOWFLAKE_DATABASE") 
-SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_RAW", "RAW")
+SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_RAW")
 TABLE = "RESPIRATORY_SOUNDS_METADATA"
 
 

@@ -51,7 +51,7 @@ def upload_audio_files_to_stage():
 
 if __name__ == "__main__":
     print("🚀 Transferring audio files to Snowflake stage...")
-    #with SnowflakeClient() as client:
-    #    create_stage(client)
-    #upload_audio_files_to_stage()
+    with SnowflakeClient() as client:
+        create_stage(client)
+    upload_audio_files_to_stage()
     print("✅ Files transferred to stage successfully!")
