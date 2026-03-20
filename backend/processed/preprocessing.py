@@ -173,86 +173,145 @@ def process_one_file(local_path, file_name, class_name):
 
     return padded, sr, modification, processed_meta
 
+def process_audio(y, sr):
+    # resample
+    if sr != TARGET_SR:
+        y = librosa.resample(y, orig_sr=sr, target_sr=TARGET_SR)
+        sr = TARGET_SR
 
-metadata_df = session.sql(f"SELECT * FROM {SOURCE_METADATA_TABLE}").to_pandas()
-modifications = []
-processed_metadata = []
+    # filter
+    y = bandpass_filter(y, sr)
 
-with tempfile.TemporaryDirectory() as tmpdir:
-    src_dir = os.path.join(tmpdir, "source")
-    dst_dir = os.path.join(tmpdir, "processed")
-    os.makedirs(src_dir, exist_ok=True)
-    os.makedirs(dst_dir, exist_ok=True)
+    # trim
+    y, leading_silence_s = trim_leading_silence(y, sr)
 
-    for class_name, subdir in CLASS_TO_DIR.items():
-        class_files = metadata_df[metadata_df["CLASS"] == class_name]
-        if class_files.empty:
-            continue
+    # skip short
+    duration = len(y) / sr
+    if duration < MIN_DURATION_S:
+        return None, sr, {"skipped": True, "duration": duration}
 
-        class_src = os.path.join(src_dir, subdir)
-        class_dst = os.path.join(dst_dir, subdir)
-        os.makedirs(class_src, exist_ok=True)
-        os.makedirs(class_dst, exist_ok=True)
+    # pad/crop
+    y = pad_or_crop(y, sr)
 
-        session.file.get(f"{SOURCE_STAGE}/{subdir}", class_src)
-        print(f"Downloaded {class_name} files to {class_src}")
+    return y, sr, {
+        "skipped": False,
+        "duration": duration,
+        "leading_silence_s": leading_silence_s
+    }
 
-        for _, row in class_files.iterrows():
-            file_name = row["FILE_NAME"]
-            local_path = os.path.join(class_src, file_name)
+def compute_metadata(y, sr, file_name, class_name):
+    duration = len(y) / sr
+    amplitude = float(np.max(np.abs(y)))
+    rms = float(np.sqrt(np.mean(y**2)))
 
-            if not os.path.exists(local_path):
-                modifications.append(
-                    {
-                        "FILE_NAME": file_name,
-                        "CLASS": class_name,
-                        "ACTION": "SKIPPED_NOT_FOUND",
-                        "ORIGINAL_DURATION_S": row["DURATION_S"],
-                        "STRIPPED_DURATION_S": None,
-                        "FINAL_DURATION_S": None,
-                        "SILENCE_STRIPPED_S": None,
-                    }
-                )
+    return {
+        "FILE_NAME": file_name,
+        "CLASS": class_name,
+        "SAMPLE_RATE": sr,
+        "DURATION_S": round(duration, 4),
+        "N_SAMPLES": len(y),
+        "AMPLITUDE_MAX": round(amplitude, 6),
+        "RMS": round(rms, 6),
+    }
+
+def run_preprocessing_pipeline(
+    session,
+    source_stage,
+    target_stage,
+    source_metadata_table,
+    target_metadata_table,
+    class_to_dir
+):
+    metadata_df = session.sql(f"SELECT * FROM {source_metadata_table}").to_pandas()
+
+    modifications = []
+    processed_metadata = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src_dir = os.path.join(tmpdir, "source")
+        dst_dir = os.path.join(tmpdir, "processed")
+        os.makedirs(src_dir, exist_ok=True)
+        os.makedirs(dst_dir, exist_ok=True)
+
+        for class_name, subdir in CLASS_TO_DIR.items():
+            class_files = metadata_df[metadata_df["CLASS"] == class_name]
+            if class_files.empty:
                 continue
 
-            try:
-                padded, sr, mod, meta = process_one_file(
-                    local_path, file_name, class_name
-                )
-                modifications.append(mod)
+            class_src = os.path.join(src_dir, subdir)
+            class_dst = os.path.join(dst_dir, subdir)
+            os.makedirs(class_src, exist_ok=True)
+            os.makedirs(class_dst, exist_ok=True)
 
-                if padded is not None:
-                    out_path = os.path.join(class_dst, file_name)
-                    sf.write(out_path, padded, sr)
-                    processed_metadata.append(meta)
+            session.file.get(f"{SOURCE_STAGE}/{subdir}", class_src)
+            print(f"Downloaded {class_name} files to {class_src}")
 
-            except Exception as e:
-                modifications.append(
-                    {
-                        "FILE_NAME": file_name,
-                        "CLASS": class_name,
-                        "ACTION": f"ERROR: {str(e)[:100]}",
-                        "ORIGINAL_DURATION_S": row["DURATION_S"],
-                        "STRIPPED_DURATION_S": None,
-                        "FINAL_DURATION_S": None,
-                        "SILENCE_STRIPPED_S": None,
-                    }
-                )
+            for _, row in class_files.iterrows():
+                file_name = row["FILE_NAME"]
+                local_path = os.path.join(class_src, file_name)
 
-        for f in os.listdir(class_dst):
-            try:
-                session.file.put(
-                    os.path.join(class_dst, f),
-                    f"{TARGET_STAGE}/{subdir}",
-                    auto_compress=False,
-                    overwrite=True
-                )
-            except Exception as e:
-                print(f"❌ Upload failed for {f}: {e}")
-        print(f"  {class_name}: {len(os.listdir(class_dst))} files uploaded")
+                if not os.path.exists(local_path):
+                    modifications.append(
+                        {
+                            "FILE_NAME": file_name,
+                            "CLASS": class_name,
+                            "ACTION": "SKIPPED_NOT_FOUND",
+                            "ORIGINAL_DURATION_S": row["DURATION_S"],
+                            "STRIPPED_DURATION_S": None,
+                            "FINAL_DURATION_S": None,
+                            "SILENCE_STRIPPED_S": None,
+                        }
+                    )
+                    continue
 
-modifications_df = pd.DataFrame(modifications)
-processed_metadata_df = pd.DataFrame(processed_metadata)
+                try:
+                    padded, sr, mod, meta = process_one_file(
+                        local_path, file_name, class_name
+                    )
+                    modifications.append(mod)
+
+                    if padded is not None:
+                        out_path = os.path.join(class_dst, file_name)
+                        sf.write(out_path, padded, sr)
+                        processed_metadata.append(meta)
+
+                except Exception as e:
+                    modifications.append(
+                        {
+                            "FILE_NAME": file_name,
+                            "CLASS": class_name,
+                            "ACTION": f"ERROR: {str(e)[:100]}",
+                            "ORIGINAL_DURATION_S": row["DURATION_S"],
+                            "STRIPPED_DURATION_S": None,
+                            "FINAL_DURATION_S": None,
+                            "SILENCE_STRIPPED_S": None,
+                        }
+                    )
+
+            for f in os.listdir(class_dst):
+                try:
+                    session.file.put(
+                        os.path.join(class_dst, f),
+                        f"{TARGET_STAGE}/{subdir}",
+                        auto_compress=False,
+                        overwrite=True
+                    )
+                except Exception as e:
+                    print(f"❌ Upload failed for {f}: {e}")
+
+            print(f"  {class_name}: {len(os.listdir(class_dst))} files uploaded")
+
+    return pd.DataFrame(modifications), pd.DataFrame(processed_metadata)
+
+
+modifications_df, processed_metadata_df = run_preprocessing_pipeline(
+    session=session,
+    source_stage=SOURCE_STAGE,
+    target_stage=TARGET_STAGE,
+    source_metadata_table=SOURCE_METADATA_TABLE,
+    target_metadata_table=TARGET_METADATA_TABLE,
+    class_to_dir=CLASS_TO_DIR
+)
 print(f"\nTotal files: {len(modifications_df)}")
 print(modifications_df["ACTION"].value_counts().to_string())
 
