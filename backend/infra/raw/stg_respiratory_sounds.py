@@ -6,8 +6,8 @@ from ...utils.snowflake_client import SnowflakeClient
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
 
-DATABASE = os.getenv("SNOWFLAKE_DATABASE", "TESSAN_HACKATHON")
-SCHEMA = "DATASETS"
+DATABASE = os.getenv("SNOWFLAKE_DATABASE")
+SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_RAW")
 STAGE_NAME = "STG_RESPIRATORY_SOUNDS"
 STAGE_FULL_PATH = f"{DATABASE}.{SCHEMA}.{STAGE_NAME}"
 
@@ -51,7 +51,7 @@ def upload_audio_files_to_stage():
 
 if __name__ == "__main__":
     print("🚀 Transferring audio files to Snowflake stage...")
-    with SnowflakeClient() as client:
-        create_stage(client)
-    upload_audio_files_to_stage()
+    #with SnowflakeClient() as client:
+    #    create_stage(client)
+    #upload_audio_files_to_stage()
     print("✅ Files transferred to stage successfully!")

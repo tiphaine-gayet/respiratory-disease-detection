@@ -8,13 +8,14 @@ Based on pipeline.ipynb's extract_metadata function.
 from pathlib import Path
 import numpy as np
 import librosa
+import os 
 from ...utils.snowflake_client import SnowflakeClient
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 DATASET_ROOT = PROJECT_ROOT / "asthma_detection_dataset" / "audio"
 
-DATABASE = "TESSAN_HACKATHON"
-SCHEMA = "DATASETS"
+DATABASE = os.getenv("SNOWFLAKE_DATABASE") 
+SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_RAW", "RAW")
 TABLE = "RESPIRATORY_SOUNDS_METADATA"
 
 
