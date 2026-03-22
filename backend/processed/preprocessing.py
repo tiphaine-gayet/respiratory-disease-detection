@@ -32,6 +32,9 @@ print("Connected ✓")
 session.sql(
     "CREATE STAGE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.STG_RESPIRATORY_SOUNDS"
 ).collect()
+session.sql(
+    "CREATE STAGE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.STG_RESPIRATORY_FEATURES"
+).collect()
 print("Stage ready ✓")
 
 # ============================================================
@@ -39,8 +42,10 @@ print("Stage ready ✓")
 # ============================================================
 SOURCE_STAGE = "@M2_ISD_EQUIPE_1_DB.RAW.STG_RESPIRATORY_SOUNDS"
 TARGET_STAGE = "@M2_ISD_EQUIPE_1_DB.PROCESSED.STG_RESPIRATORY_SOUNDS"
+FEATURE_STAGE = "@M2_ISD_EQUIPE_1_DB.PROCESSED.STG_RESPIRATORY_FEATURES"
 SOURCE_METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.RAW.RESPIRATORY_SOUNDS_METADATA"
 TARGET_METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_SOUNDS_METADATA"
+FEATURE_METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_FEATURES_METADATA"
 TARGET_SR = 22050
 MIN_DURATION_S = 4
 TARGET_DURATION_S = 6
@@ -133,7 +138,6 @@ def process_one_file(local_path, file_name, class_name):
             None,
         )
 
-
     # --- Étape 3 : pad / crop  ---
     padded = pad_or_crop(trimmed, sr)
     final_duration = len(padded) / sr
@@ -214,11 +218,43 @@ def compute_metadata(y, sr, file_name, class_name):
         "RMS": round(rms, 6),
     }
 
+
+def extract_and_store_features(y, sr, file_name, class_name, local_feature_dir, features_metadata):
+    """
+    Extrait 6 features et sauvegarde en .npy local.
+    Upload vers Snowflake fait en batch après la boucle par classe.
+    """
+    features = {
+        "mel":       librosa.power_to_db(
+                         librosa.feature.melspectrogram(
+                             y=y, sr=sr, n_mels=128, n_fft=2048, hop_length=512
+                         ), ref=np.max),
+        "mfcc":      librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13),
+        "chroma":    librosa.feature.chroma_stft(y=y, sr=sr),
+        "centroid":  librosa.feature.spectral_centroid(y=y, sr=sr),
+        "bandwidth": librosa.feature.spectral_bandwidth(y=y, sr=sr),
+        "zcr":       librosa.feature.zero_crossing_rate(y),
+    }
+
+    for feature_type, feature_data in features.items():
+        npy_filename = f"{file_name}_{feature_type}.npy"
+        np.save(os.path.join(local_feature_dir, npy_filename), feature_data)
+
+        features_metadata.append({
+            "FILE_NAME":    file_name,
+            "CLASS":        class_name,
+            "FEATURE_TYPE": feature_type,
+            "NPY_FILENAME": npy_filename,
+            "STAGE_PATH":   f"{FEATURE_STAGE}/{class_name}/{npy_filename}"
+        })
+
+
 def run_preprocessing_pipeline(
     session,
     source_stage,
     target_stage,
     source_metadata_table,
+        feature_stage, 
     target_metadata_table,
     class_to_dir
 ):
@@ -226,24 +262,29 @@ def run_preprocessing_pipeline(
 
     modifications = []
     processed_metadata = []
+    features_metadata = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
         src_dir = os.path.join(tmpdir, "source")
         dst_dir = os.path.join(tmpdir, "processed")
+        feature_dir = os.path.join(tmpdir, "features")
         os.makedirs(src_dir, exist_ok=True)
         os.makedirs(dst_dir, exist_ok=True)
+        os.makedirs(feature_dir, exist_ok=True)
 
-        for class_name, subdir in CLASS_TO_DIR.items():
+        for class_name, subdir in class_to_dir.items():
             class_files = metadata_df[metadata_df["CLASS"] == class_name]
             if class_files.empty:
                 continue
 
             class_src = os.path.join(src_dir, subdir)
             class_dst = os.path.join(dst_dir, subdir)
+            class_feat = os.path.join(feature_dir, subdir)
             os.makedirs(class_src, exist_ok=True)
             os.makedirs(class_dst, exist_ok=True)
+            os.makedirs(class_feat, exist_ok=True)
 
-            session.file.get(f"{SOURCE_STAGE}/{subdir}", class_src)
+            session.file.get(f"{source_stage}/{subdir}", class_src)
             print(f"Downloaded {class_name} files to {class_src}")
 
             for _, row in class_files.iterrows():
@@ -251,8 +292,14 @@ def run_preprocessing_pipeline(
                 local_path = os.path.join(class_src, file_name)
 
                 if not os.path.exists(local_path):
-                    modifications.append(
-                        {
+                    gz_path = local_path + ".gz"
+                    if os.path.exists(gz_path):
+                        import gzip, shutil
+                        with gzip.open(gz_path, "rb") as f_in:
+                            with open(local_path, "wb") as f_out:
+                                shutil.copyfileobj(f_in, f_out)
+                    else:
+                        modifications.append({
                             "FILE_NAME": file_name,
                             "CLASS": class_name,
                             "ACTION": "SKIPPED_NOT_FOUND",
@@ -260,9 +307,8 @@ def run_preprocessing_pipeline(
                             "STRIPPED_DURATION_S": None,
                             "FINAL_DURATION_S": None,
                             "SILENCE_STRIPPED_S": None,
-                        }
-                    )
-                    continue
+                        })
+                        continue
 
                 try:
                     padded, sr, mod, meta = process_one_file(
@@ -274,6 +320,15 @@ def run_preprocessing_pipeline(
                         out_path = os.path.join(class_dst, file_name)
                         sf.write(out_path, padded, sr)
                         processed_metadata.append(meta)
+
+                        extract_and_store_features(
+                            y=padded,
+                            sr=sr,
+                            file_name=file_name,
+                            class_name=subdir,
+                            local_feature_dir=class_feat,
+                            features_metadata=features_metadata
+                        )
 
                 except Exception as e:
                     modifications.append(
@@ -288,26 +343,30 @@ def run_preprocessing_pipeline(
                         }
                     )
 
-            for f in os.listdir(class_dst):
-                try:
-                    session.file.put(
-                        os.path.join(class_dst, f),
-                        f"{TARGET_STAGE}/{subdir}",
-                        auto_compress=False,
-                        overwrite=True
-                    )
-                except Exception as e:
-                    print(f"❌ Upload failed for {f}: {e}")
+            for local_dir, stage_path in [    
+                (class_dst,  f"{target_stage}/{subdir}"),
+                (class_feat, f"{feature_stage}/{subdir}"),]:
+                for f in os.listdir(local_dir):
+                    try:
+                        session.file.put(
+                            os.path.join(local_dir, f),
+                            stage_path,
+                            auto_compress=False,
+                            overwrite=True
+                        )
+                    except Exception as e:
+                        print(f"❌ Upload failed for {f}: {e}")
 
             print(f"  {class_name}: {len(os.listdir(class_dst))} files uploaded")
 
-    return pd.DataFrame(modifications), pd.DataFrame(processed_metadata)
+    return pd.DataFrame(modifications), pd.DataFrame(processed_metadata), pd.DataFrame(features_metadata)
 
 
-modifications_df, processed_metadata_df = run_preprocessing_pipeline(
+modifications_df, processed_metadata_df, features_metadata_df = run_preprocessing_pipeline(
     session=session,
     source_stage=SOURCE_STAGE,
     target_stage=TARGET_STAGE,
+    feature_stage=FEATURE_STAGE,    
     source_metadata_table=SOURCE_METADATA_TABLE,
     target_metadata_table=TARGET_METADATA_TABLE,
     class_to_dir=CLASS_TO_DIR
@@ -330,6 +389,15 @@ if not processed_metadata_df.empty:
     )
 else:
     print("No processed files to save.")
+
+if not features_metadata_df.empty:
+    sf_df = session.create_dataframe(features_metadata_df)
+    sf_df.write.mode("overwrite").save_as_table(FEATURE_METADATA_TABLE)
+    print(
+        f"Feature metadata table created: {FEATURE_METADATA_TABLE} ({len(features_metadata_df)} rows)"
+    )
+else:
+    print("No features to save.")
 
 # ============================================================
 # SUMMARY
