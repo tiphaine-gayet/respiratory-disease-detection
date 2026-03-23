@@ -1,5 +1,4 @@
 import streamlit as st
-import numpy as np
 from components.doctor_styles import inject_doctor_css, doctor_header
 from components.charts import waveform_chart_doc, mel_spectrogram_doc
 
@@ -125,7 +124,6 @@ def render_compare():
     # ── Results ──
     if "compare_result" in st.session_state:
         ref = REF_AUDIOS[st.session_state["compare_result"]]
-        ref_name = st.session_state["compare_result"]
 
         st.markdown(
             f"""

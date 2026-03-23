@@ -1,6 +1,6 @@
 import streamlit as st
-import librosa
-import numpy as np
+from components.audio import load_audio, preprocess_audio
+from components.charts import waveform_chart, mel_spectrogram
 
 def render_patient():
     st.markdown(_PATIENT_CSS, unsafe_allow_html=True)
@@ -17,7 +17,7 @@ def render_patient():
     )
 
     # Centered card
-    spacer_l, card_col, spacer_r = st.columns([1, 2, 1])
+    _, card_col, _ = st.columns([1, 2, 1])
 
     with card_col:
         st.markdown(
@@ -45,11 +45,15 @@ def render_patient():
             st.session_state["recorded"] = True
 
         if uploaded_file:
+            if not uploaded_file.name.endswith((".wav", ".mp3", ".flac")):
+                st.error("Format non supporté")
+                return
+            st.audio(uploaded_file)
+            uploaded_file.seek(0)
             with st.spinner("Chargement…"):
-                audio, sr = librosa.load(uploaded_file, sr=None)
-
+                audio, sr = load_audio(uploaded_file)
+                audio, sr = preprocess_audio(audio, sr)
             st.markdown('<div class="p-viz-label">FORME D\'ONDE</div>', unsafe_allow_html=True)
-            from components.charts import waveform_chart, mel_spectrogram
 
             st.pyplot(waveform_chart(audio, sr), use_container_width=True)
 
