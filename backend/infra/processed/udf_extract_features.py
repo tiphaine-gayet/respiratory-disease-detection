@@ -29,6 +29,9 @@ import zipfile
 import json
 import base64
 
+# Import Snowpark types
+from snowflake.snowpark.types import StringType, VariantType, BooleanType
+
 # Setup librosa from Snowflake import directory
 def _setup_librosa():
     """Extract librosa from Snowflake import directory."""
@@ -225,8 +228,8 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
     """
     session.udf.register(
         extract_features_udf,
-        input_types=["string", "string", "string", "string", "boolean", "string"],
-        return_type="variant",
+        input_types=[StringType(), StringType(), StringType(), StringType(), BooleanType(), StringType()],
+        return_type=VariantType(),
         name=udf_name,
         is_permanent=True,
         replace=True,

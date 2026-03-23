@@ -34,6 +34,9 @@ try:
 except ImportError:
     get_active_session = None
 
+# Import Snowpark types
+from snowflake.snowpark.types import StringType, VariantType
+
 # Setup librosa from Snowflake import directory
 def _setup_librosa():
     """Extract librosa from Snowflake import directory."""
@@ -317,8 +320,8 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     # Register UDF
     session.udf.register(
         process_file_udf,
-        input_types=["string", "string", "string"],
-        return_type="variant",
+        input_types=[StringType(), StringType(), StringType()],
+        return_type=VariantType(),
         name=udf_name,
         is_permanent=True,
         replace=True,
