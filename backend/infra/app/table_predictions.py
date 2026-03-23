@@ -12,7 +12,7 @@ SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_APP")
 TABLE = "PREDICTIONS"
 
 # Clinical action thresholds are enforced at app level; only valid labels stored here.
-VALID_ACTIONS = ("RAS", "SUIVI_48H", "URGENCE")
+# VALID_ACTIONS = ("RAS", "SUIVI_48H", "URGENCE")
 
 def create_table(client):
     client.execute(f"""
@@ -22,7 +22,7 @@ def create_table(client):
 
             -- Patient & pharmacy
             patient_id        VARCHAR(15)    NOT NULL,  -- numéro de sécurité sociale
-            pharmacie_id   VARCHAR(14),              -- OSM_ID from PUBLIC.PHARMACIES_FRANCE
+            pharmacie_id   VARCHAR(14),                 -- OSM_ID from APP.PHARMACIES_FRANCE
 
             -- Source audio (FK to ingested layer)
             audio_file_name   VARCHAR        NOT NULL,  -- FK → INGESTED.INGESTED_SOUNDS_METADATA.file_name

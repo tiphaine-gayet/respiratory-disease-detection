@@ -11,7 +11,7 @@ help:
 	@echo "  make infra             - Run all infrastructure setup steps (raw, ingested, app)"
 	@echo "  make raw               - Transfer raw audio files and metadata to Snowflake"
 	@echo "  make app               - Set up predictions table and load data used in app (pharmacies in France) into Snowflake"
-	@echo "  make ingested          - Create INGESTED and APP schemas (predictions + ingested audio)"
+	@echo "  make ingested          - Create INGESTED schema (ingested audio files, extracted features, and metadata)"
 	@echo ""
 
 venv:

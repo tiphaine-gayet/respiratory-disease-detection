@@ -12,7 +12,7 @@ SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_INGESTED")
 TABLE = "INGESTED_FEATURES_METADATA"
 
 # Feature types produced by the extraction pipeline
-FEATURE_TYPES = ("mel", "mfcc", "chroma", "centroid", "bandwidth", "zcr")
+# FEATURE_TYPES = ("mel", "mfcc", "chroma", "centroid", "bandwidth", "zcr")
 
 
 def create_table(client):

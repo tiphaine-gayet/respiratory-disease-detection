@@ -17,7 +17,7 @@ def create_table(client):
         CREATE TABLE IF NOT EXISTS {DATABASE}.{SCHEMA}.{TABLE} (
             file_name         VARCHAR        NOT NULL,
             patient_id        VARCHAR(15)    NOT NULL,  -- numéro de sécurité sociale (13 digits + 2-char key)
-            pharmacie_id      VARCHAR(14),              -- OMS_ID from PUBLIC.PHARMACIES_FRANCE
+            pharmacie_id      VARCHAR(14),              -- OMS_ID from APP.PHARMACIES_FRANCE
             recorded_at       TIMESTAMP_NTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP(),
             sample_rate       INTEGER,
             duration_s        FLOAT,
