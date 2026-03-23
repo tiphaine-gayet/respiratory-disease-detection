@@ -7,6 +7,7 @@ help:
 	@echo "  make venv              - Create virtual environment and install dependencies"
 	@echo "  make download_dataset  - Download and prepare the asthma detection dataset"
 	@echo "  make raw               - Transfer raw audio files and metadata to Snowflake"
+	@echo "  make public            - Load public data (pharmacies in France) into Snowflake"
 	@echo ""
 
 venv:
@@ -32,3 +33,5 @@ raw:
 	@python -m backend.infra.raw.table_respiratory_sounds_metadata
 	@echo "✅ Metadata ingested successfully!"
 
+public:
+	@python -m backend.infra.public.load_pharmacies_france
