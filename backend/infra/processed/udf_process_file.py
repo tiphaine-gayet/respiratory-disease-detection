@@ -323,7 +323,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     RETURNS VARIANT
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
-    PACKAGES = ('scipy', 'numpy', 'pandas', 'soundfile')
+    PACKAGES = ('scipy', 'numpy', 'pandas', 'pysoundfile')
     IMPORTS = ('@M2_ISD_EQUIPE_1_DB.PUBLIC.STG_LIBRARIES/libs/libroza.zip')
     HANDLER = 'process_file_udf_handler'
     AS $$
