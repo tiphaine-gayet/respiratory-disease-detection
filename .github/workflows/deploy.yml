@@ -28,10 +28,12 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install snowflake-connector-python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Syntax Check
-        run: python -m py_compile scripts/deploy_infrastructure.py
+        run: python -m py_compile backend/infra/deploy/deploy_infrastructure.py
 
   deploy-snowflake:
     needs: lint-and-check
@@ -48,7 +50,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install snowflake-connector-python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Deploy Infrastructure
         env:
@@ -56,3 +60,13 @@ jobs:
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: python backend/infra/deploy/deploy_infrastructure.py
+
+      - name: Deploy Audio UDFs (2 files)
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_DATABASE: M2_ISD_EQUIPE_1_DB
+          SNOWFLAKE_SCHEMA: PROCESSED
+          SNOWFLAKE_WAREHOUSE: COMPUTE_WH
+        run: python backend/infra/deploy/deploy_dual_udfs.py
