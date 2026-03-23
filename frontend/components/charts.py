@@ -13,7 +13,7 @@ def _apply_dark_style(fig, ax):
     ax.yaxis.label.set_color("white")
     ax.title.set_color("white")
     for spine in ax.spines.values():
-        spine.set_color("rgba(255,255,255,0.2)")
+        spine.set_color((1, 1, 1, 0.2))
 
 def waveform_chart(audio, sr):
     fig, ax = plt.subplots(figsize=(10, 3))
@@ -105,7 +105,7 @@ def radar_chart(data):
     ax.set_ylim(0, 70)
     ax.set_yticks([20, 40, 60])
     ax.set_yticklabels([])
-    ax.spines["polar"].set_color("rgba(0,0,0,0.06)")
-    ax.grid(color="rgba(0,0,0,0.06)")
+    ax.spines["polar"].set_color((0.0, 0.0, 0.0, 0.06))
+    ax.grid(color="black", alpha=0.06)
     fig.tight_layout()
     return fig
