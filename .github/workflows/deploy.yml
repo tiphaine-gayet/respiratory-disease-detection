@@ -71,4 +71,4 @@ jobs:
           SNOWFLAKE_DATABASE: M2_ISD_EQUIPE_1_DB
           SNOWFLAKE_SCHEMA: PROCESSED
           SNOWFLAKE_WAREHOUSE: COMPUTE_WH
-        run: python scripts/deploy_dual_udfs.py
+        run: python backend/infra/deploy/deploy_dual_udfs.py

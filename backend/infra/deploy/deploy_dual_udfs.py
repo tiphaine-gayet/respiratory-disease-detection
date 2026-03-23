@@ -7,7 +7,7 @@ This script deploys two separate UDFs to Snowflake:
 2. EXTRACT_FEATURES_UDF - Handles feature extraction
 
 Usage:
-    python scripts/deploy_dual_udfs.py
+    python backend/infra/deploy/deploy_dual_udfs.py
 
 Environment variables required:
     SNOWFLAKE_ACCOUNT
