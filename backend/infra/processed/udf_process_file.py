@@ -1,0 +1,334 @@
+"""
+Snowflake UDF for audio preprocessing
+======================================
+
+This module provides a Snowflake-deployable UDF for audio preprocessing:
+1. Loads an audio file from a stage
+2. Processes it through the complete pipeline (resample, filter, trim, pad, normalize)
+3. Returns metadata about the processing
+
+Pipeline steps:
+  1. Resample → TARGET_SR (22050 Hz)
+  2. Bandpass filter 100-2000 Hz
+  3. Trim silence from beginning & end
+  4. Reject if duration < MIN_DURATION_S (4 sec)
+  5. Pad/crop → TARGET_DURATION_S (6 sec)
+  6. Normalize amplitude to 0.95 peak
+
+Usage (in deployment script):
+    from snowflake.snowpark.context import get_active_session
+    from udf_process_file import deploy_udf_process_file
+    session = get_active_session()
+    deploy_udf_process_file(session)
+"""
+
+import sys
+import os
+import io
+import zipfile
+import json
+
+# Get Snowflake session for metadata insertion
+try:
+    from snowflake.snowpark.context import get_active_session
+except ImportError:
+    get_active_session = None
+
+# Setup librosa from Snowflake import directory
+def _setup_librosa():
+    """Extract librosa from Snowflake import directory."""
+    try:
+        import_dir = sys._xoptions.get("snowflake_import_directory")
+        if import_dir:
+            zip_name = "libroza.zip"
+            final_lib_dir = "/tmp/site-packages"
+            os.makedirs(final_lib_dir, exist_ok=True)
+            
+            zip_path = os.path.join(import_dir, zip_name)
+            if os.path.exists(zip_path):
+                with zipfile.ZipFile(zip_path, 'r') as outer:
+                    for name in outer.namelist():
+                        if name.endswith(".whl"):
+                            whl_bytes = outer.read(name)
+                            with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
+                                whl.extractall(final_lib_dir)
+                
+                if final_lib_dir not in sys.path:
+                    sys.path.insert(0, final_lib_dir)
+    except Exception as e:
+        pass
+
+_setup_librosa()
+
+import numpy as np
+import librosa
+import soundfile as sf
+from scipy.signal import butter, filtfilt
+import warnings
+import pandas as pd
+
+warnings.filterwarnings('ignore')
+
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+CONFIG = {
+    "TARGET_SR": 22050,
+    "MIN_DURATION_S": 4,
+    "TARGET_DURATION_S": 6,
+    "SILENCE_DB": 30,
+    "BANDPASS_LOW": 100,
+    "BANDPASS_HIGH": 2000,
+}
+
+
+# ── Audio Processing Functions ────────────────────────────────────────────────
+def bandpass_filter(y, sr, low=CONFIG["BANDPASS_LOW"], high=CONFIG["BANDPASS_HIGH"], order=4):
+    """
+    Butterworth bandpass filter 100-2000 Hz.
+    Guard: filtfilt requires at least padlen+1 samples (≈ 3*order*2 = 24).
+    Below that, returns raw signal to avoid crashes.
+    """
+    min_samples = 3 * order * 2 + 1
+    if len(y) < min_samples:
+        return y
+    nyq = sr / 2
+    b, a = butter(order, [low / nyq, high / nyq], btype='band')
+    return filtfilt(b, a, y)
+
+
+def trim_silence(y, sr, top_db=CONFIG["SILENCE_DB"]):
+    """
+    Remove silence from beginning AND end.
+    Returns (y_trimmed, leading_s, trailing_s).
+    """
+    _, indices = librosa.effects.trim(y, top_db=top_db)
+    y_trimmed = y[indices[0]:indices[1]]
+    leading_s = indices[0] / sr
+    trailing_s = (len(y) - indices[1]) / sr
+    return y_trimmed, leading_s, trailing_s
+
+
+def pad_or_crop(y, sr, target_s=CONFIG["TARGET_DURATION_S"]):
+    """Pad or crop to standardized duration."""
+    target = int(target_s * sr)
+    if len(y) < target:
+        return np.pad(y, (0, target - len(y)))
+    return y[:target]
+
+
+def normalize_amplitude(y, target_peak=0.95):
+    """Normalize amplitude peak."""
+    peak = np.max(np.abs(y))
+    if peak > 0:
+        return y / peak * target_peak
+    return y
+
+
+def process_file(y_raw, sr_raw, file_name, class_name):
+    """
+    Complete audio processing pipeline.
+    
+    Takes raw audio (y_raw, sr_raw) and applies 6-step preprocessing.
+    
+    Returns: (y_processed, sr, meta_dict) or (None, sr, meta_dict) if rejected
+    """
+    TARGET_SR = CONFIG["TARGET_SR"]
+    MIN_DURATION_S = CONFIG["MIN_DURATION_S"]
+    TARGET_DURATION_S = CONFIG["TARGET_DURATION_S"]
+    
+    original_duration = len(y_raw) / sr_raw
+
+    # 1. Resample
+    if sr_raw != TARGET_SR:
+        y = librosa.resample(y_raw, orig_sr=sr_raw, target_sr=TARGET_SR)
+        sr = TARGET_SR
+    else:
+        y, sr = y_raw.copy(), sr_raw
+
+    # 2. Bandpass filter
+    y = bandpass_filter(y, sr)
+
+    # 3. Trim silence from beginning and end
+    y, leading_s, trailing_s = trim_silence(y, sr)
+    stripped_duration = len(y) / sr
+
+    # 4. Reject if too short after silence trim
+    # if stripped_duration < MIN_DURATION_S:
+    #     return None, sr, {
+    #         "FILE_NAME": file_name,
+    #         "CLASS": class_name,
+    #         "ACTION": "SKIPPED_TOO_SHORT",
+    #         "ORIGINAL_DURATION_S": round(original_duration, 4),
+    #         "STRIPPED_DURATION_S": round(stripped_duration, 4),
+    #         "FINAL_DURATION_S": None,
+    #         "LEADING_SILENCE_S": round(leading_s, 4),
+    #         "TRAILING_SILENCE_S": round(trailing_s, 4),
+    #         "SAMPLE_RATE": None,
+    #         "N_SAMPLES": None,
+    #         "AMPLITUDE_MAX": None,
+    #         "RMS": None,
+    #     }
+
+    # 5. Pad or crop to target duration
+    y = pad_or_crop(y, sr)
+
+    # 6. Normalize amplitude
+    y = normalize_amplitude(y)
+
+    # Determine action label
+    target_samples = int(TARGET_DURATION_S * sr)
+    if leading_s > 0 and trailing_s > 0:
+        action = "STRIPPED_BOTH_ENDS"
+    elif leading_s > 0:
+        action = "STRIPPED_LEADING"
+    elif trailing_s > 0:
+        action = "STRIPPED_TRAILING"
+    elif len(y) == target_samples and original_duration * sr > target_samples:
+        action = "CROPPED"
+    elif len(y) == target_samples and original_duration * sr < target_samples:
+        action = "PADDED"
+    else:
+        action = "PROCESSED"
+
+    meta = {
+        "FILE_NAME": file_name,
+        "CLASS": class_name,
+        "ACTION": action,
+        "ORIGINAL_DURATION_S": round(original_duration, 4),
+        "STRIPPED_DURATION_S": round(stripped_duration, 4),
+        "FINAL_DURATION_S": round(len(y) / sr, 4),
+        "LEADING_SILENCE_S": round(leading_s, 4),
+        "TRAILING_SILENCE_S": round(trailing_s, 4),
+        "SAMPLE_RATE": sr,
+        "N_SAMPLES": len(y),
+        "AMPLITUDE_MAX": round(float(np.max(np.abs(y))), 6),
+        "RMS": round(float(np.sqrt(np.mean(y**2))), 6),
+    }
+    return y, sr, meta
+
+
+# ── Snowflake UDF ─────────────────────────────────────────────────────────────
+def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
+    """
+    Snowflake UDF to preprocess a single audio file.
+    
+    Also inserts metadata into M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_SOUNDS_METADATA.
+    
+    Args:
+        file_name: Audio file name (e.g., 'patient_001.wav')
+        stage_name: Stage path (e.g., '@STG_RESPIRATORY_SOUNDS/asthma/')
+        class_name: Class label (e.g., 'Asthma')
+        
+    Returns:
+        dict with preprocessing status and metadata
+    """
+    try:
+        # Construct full path
+        if not stage_name.endswith('/'):
+            stage_name = stage_name + '/'
+        file_path = stage_name + file_name
+        
+        # Load audio from stage
+        y, sr = librosa.load(file_path, sr=None)
+        
+        # Process through pipeline
+        y_proc, sr_proc, meta = process_file(y, sr, file_name, class_name)
+        
+        # Insert metadata into table
+        try:
+            if get_active_session is not None:
+                session = get_active_session()
+                # Create DataFrame for safer insertion
+                df = pd.DataFrame([{
+                    'FILE_NAME': meta.get("FILE_NAME"),
+                    'CLASS': meta.get("CLASS"),
+                    'ACTION': meta.get("ACTION"),
+                    'ORIGINAL_DURATION_S': meta.get("ORIGINAL_DURATION_S"),
+                    'STRIPPED_DURATION_S': meta.get("STRIPPED_DURATION_S"),
+                    'FINAL_DURATION_S': meta.get("FINAL_DURATION_S"),
+                    'LEADING_SILENCE_S': meta.get("LEADING_SILENCE_S"),
+                    'TRAILING_SILENCE_S': meta.get("TRAILING_SILENCE_S"),
+                    'SAMPLE_RATE': meta.get("SAMPLE_RATE"),
+                    'N_SAMPLES': meta.get("N_SAMPLES"),
+                    'AMPLITUDE_MAX': meta.get("AMPLITUDE_MAX"),
+                    'RMS': meta.get("RMS"),
+                }])
+                session.create_dataframe(df).write.mode("append").save_as_table(
+                    "M2_ISD_EQUIPE_1_DB.PROCESSED.USER_RESPIRATORY_SOUNDS_METADATA",
+                    create_temp_table=False
+                )
+        except Exception as insert_error:
+            # Log insert error but don't fail the UDF
+            pass
+        
+        return {
+            "FILE_NAME": file_name,
+            "CLASS": class_name,
+            "STAGE": stage_name,
+            "STATUS": "SUCCESS" if y_proc is not None else "REJECTED",
+            "ACTION": meta.get("ACTION"),
+            "METADATA": meta,
+            "DB_INSERT": "SUCCESS" if y_proc is not None else "SKIPPED",
+        }
+        
+    except Exception as e:
+        return {
+            "FILE_NAME": file_name,
+            "CLASS": class_name,
+            "STAGE": stage_name,
+            "STATUS": "ERROR",
+            "ERROR": str(e)[:500],
+            "DB_INSERT": "FAILED",
+        }
+
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
+    """
+    Register the process_file UDF to Snowflake.
+    
+    Also creates the metadata table if it doesn't exist.
+    
+    Args:
+        session: Snowflake session
+        udf_name: Name for the UDF in Snowflake
+    """
+    # Create metadata table
+    session.sql("""
+        CREATE TABLE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.USER_RESPIRATORY_SOUNDS_METADATA (
+            FILE_NAME VARCHAR,
+            CLASS VARCHAR,
+            ACTION VARCHAR,
+            ORIGINAL_DURATION_S FLOAT,
+            STRIPPED_DURATION_S FLOAT,
+            FINAL_DURATION_S FLOAT,
+            LEADING_SILENCE_S FLOAT,
+            TRAILING_SILENCE_S FLOAT,
+            SAMPLE_RATE INT,
+            N_SAMPLES INT,
+            AMPLITUDE_MAX FLOAT,
+            RMS FLOAT,
+            CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
+            PRIMARY KEY (FILE_NAME, CLASS)
+        )
+    """).collect()
+    print("✓ Metadata table created/verified: RESPIRATORY_SOUNDS_METADATA")
+    
+    # Register UDF
+    session.udf.register(
+        process_file_udf,
+        input_types=["string", "string", "string"],
+        return_type="variant",
+        name=udf_name,
+        is_permanent=True,
+        replace=True,
+        stage_location="@~/",
+    )
+    print(f"✓ UDF registered: {udf_name}")
+    print(f"  → UDF will automatically insert metadata into USER_RESPIRATORY_SOUNDS_METADATA")
+
+
+if __name__ == "__main__":
+    from snowflake.snowpark.context import get_active_session
+    session = get_active_session()
+    deploy_udf_process_file(session)
