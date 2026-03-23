@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "processed"))
 from snowflake.snowpark import Session
 from udf_process_file import deploy_udf_process_file
 from udf_extract_features import deploy_udf_extract_features
+from udf_call_model import deploy_prediction_udf_stack
 
 
 def setup_snowflake_session():
@@ -130,11 +131,15 @@ def main():
         deploy_udf_process_file(session, "PROCESS_FILE_UDF")
         
         # Deploy UDF 2: Extract Features
-        print("\n[3/4] Deploying EXTRACT_FEATURES_UDF...")
+        print("\n[3/5] Deploying EXTRACT_FEATURES_UDF...")
         deploy_udf_extract_features(session, "EXTRACT_FEATURES_UDF")
+
+        # Deploy UDF 3: Model Inference
+        print("\n[4/5] Deploying CALL_MODEL_UDF...")
+        deploy_prediction_udf_stack(session, "CALL_MODEL_UDF")
         
         # Setup metadata tables
-        print("\n[4/4] Setting up metadata tables...")
+        print("\n[5/5] Setting up metadata tables...")
         setup_metadata_tables(session)
         
         # Print summary
@@ -147,11 +152,14 @@ def main():
         print("     → Preprocesses audio + auto-inserts metadata into RESPIRATORY_SOUNDS_METADATA")
         print("  2. EXTRACT_FEATURES_UDF(path, stage, file_name, class_name, save, out_stage)")
         print("     → Returns full feature data with optional stage save")
+        print("  3. CALL_MODEL_UDF(mel_json, mfcc_json, user_id, device_id, ground_truth, use_tta, n_passes)")
+        print("     → Returns prediction payload (class + probabilities + metadata)")
         
         print("\nMetadata tables created:")
         print("  - RESPIRATORY_SOUNDS_METADATA (auto-populated by PROCESS_FILE_UDF)")
         print("  - RESPIRATORY_FEATURES_METADATA")
         print("  - RESPIRATORY_FEATURES_EXTRACTED")
+        print("  - PREDICTIONS")
         
         print("\nUsage examples:")
         print("""
@@ -184,6 +192,17 @@ def main():
   -- Check metadata inserted by UDF
   SELECT * FROM M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_SOUNDS_METADATA
   LIMIT 10;
+
+    -- Call model UDF with JSON-serialized mel/mfcc arrays
+    SELECT CALL_MODEL_UDF(
+        '[[-10.5, -11.2], [-8.4, -9.1]]',
+        '[[1.2, 0.8], [0.6, 0.4]]',
+        'patient_001',
+        'CAB_PARIS_042',
+        NULL,
+        TRUE,
+        5
+    );
         """)
         
         session.close()
