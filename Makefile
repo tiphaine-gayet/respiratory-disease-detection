@@ -51,6 +51,7 @@ ingested:
 	@python -m backend.infra.ingested.table_ingested_sounds_metadata
 	@python -m backend.infra.ingested.table_ingested_features_metadata
 	@python -m backend.infra.ingested.table_ingested_sounds_processed_metadata
+	@python -m backend.infra.ingested.view_ingested_inference_data
 	@echo "✅ Done!"
 	
 infra:
