@@ -18,7 +18,7 @@ def _get_config() -> dict:
         "password": os.environ["SNOWFLAKE_TOKEN"],
         "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
         "database": os.getenv("SNOWFLAKE_DATABASE"),
-        "schema": os.getenv("SNOWFLAKE_SCHEMA_PUBLIC"),
+        "schema": os.getenv("SNOWFLAKE_SCHEMA"),
     }
 
 
