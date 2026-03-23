@@ -9,7 +9,7 @@ from ...utils.snowflake_client import SnowflakeClient
 # Configuration
 # ─────────────────────────────────────────────
 DATABASE     = os.getenv("SNOWFLAKE_DATABASE")
-SCHEMA       = os.getenv("SNOWFLAKE_SCHEMA")
+SCHEMA       = os.getenv("SNOWFLAKE_SCHEMA_APP")
 SNOWSQL_PATH = os.getenv("SNOWSQL_PATH", "snowsql")
 
 STAGE_NAME       = "STG_PHARMACIES_OSM"
@@ -171,7 +171,7 @@ def create_pharmacies_table(client):
 
         SELECT
             -- Identifiants
-            COALESCE(ref_fr_siret, '')      AS siret,
+            ref_fr_siret                    AS siret,
             ref_fr_finess                   AS nofinesset,
             osm_id,
 
@@ -229,8 +229,8 @@ def quality_check(client):
         SELECT
             COUNT(*)                                              AS total,
             COUNT(loc_lat)                                        AS avec_coordonnees,
-            ROUND(COUNT(loc_lat) * 100.0 / COUNT(*), 1)          AS pct_geolocalisees,
-            COUNT(CASE WHEN siret  = '' THEN 1 END)               AS sans_siret,
+            ROUND(COUNT(loc_lat) * 100.0 / COUNT(*), 1)           AS pct_geolocalisees,
+            COUNT(CASE WHEN siret is NULL THEN 1 END)             AS sans_siret,
             COUNT(CASE WHEN nofinesset IS NOT NULL THEN 1 END)    AS avec_finess,
             COUNT(CASE WHEN opening_hours IS NOT NULL THEN 1 END) AS avec_horaires,
             COUNT(CASE WHEN telephone IS NOT NULL THEN 1 END)     AS avec_telephone
