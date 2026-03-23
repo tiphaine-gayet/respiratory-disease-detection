@@ -24,14 +24,11 @@ import json
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "infra" / "processed"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "processed"))
 
 from snowflake.snowpark import Session
 from udf_process_file import deploy_udf_process_file
-from udf_extract_features import (
-    deploy_udf_extract_features,
-    deploy_udf_extract_features_simple
-)
+from udf_extract_features import deploy_udf_extract_features
 
 
 def setup_snowflake_session():
@@ -132,16 +129,12 @@ def main():
         print("\n[2/5] Deploying PROCESS_FILE_UDF...")
         deploy_udf_process_file(session, "PROCESS_FILE_UDF")
         
-        # Deploy UDF 2: Extract Features (full version)
-        print("\n[3/5] Deploying EXTRACT_FEATURES_UDF...")
+        # Deploy UDF 2: Extract Features
+        print("\n[3/4] Deploying EXTRACT_FEATURES_UDF...")
         deploy_udf_extract_features(session, "EXTRACT_FEATURES_UDF")
         
-        # Deploy UDF 3: Extract Features (simple version)
-        print("\n[4/5] Deploying EXTRACT_FEATURES_SIMPLE_UDF...")
-        deploy_udf_extract_features_simple(session, "EXTRACT_FEATURES_SIMPLE_UDF")
-        
         # Setup metadata tables
-        print("\n[5/5] Setting up metadata tables...")
+        print("\n[4/4] Setting up metadata tables...")
         setup_metadata_tables(session)
         
         # Print summary
@@ -154,8 +147,6 @@ def main():
         print("     → Preprocesses audio + auto-inserts metadata into RESPIRATORY_SOUNDS_METADATA")
         print("  2. EXTRACT_FEATURES_UDF(path, stage, file_name, class_name, save, out_stage)")
         print("     → Returns full feature data with optional stage save")
-        print("  3. EXTRACT_FEATURES_SIMPLE_UDF(path, stage_name)")
-        print("     → Returns feature metadata only (lightweight)")
         
         print("\nMetadata tables created:")
         print("  - RESPIRATORY_SOUNDS_METADATA (auto-populated by PROCESS_FILE_UDF)")
@@ -172,16 +163,20 @@ def main():
   );
 
   -- Extract features from processed audio
-  SELECT EXTRACT_FEATURES_SIMPLE_UDF(
+  SELECT EXTRACT_FEATURES_UDF(
     'filename.wav',
-    '@STG_RESPIRATORY_SOUNDS/asthma/'
+    '@STG_RESPIRATORY_SOUNDS/asthma/',
+    'filename.wav',
+    'Asthma',
+    FALSE,
+    NULL
   );
 
   -- Batch processing (100 files)
   SELECT 
     FILE_NAME,
     PROCESS_FILE_UDF(FILE_NAME, '@STG/', CLASS) AS PROC_RESULT,
-    EXTRACT_FEATURES_SIMPLE_UDF(FILE_NAME, '@STG/') AS FEATURES
+    EXTRACT_FEATURES_UDF(FILE_NAME, '@STG/', FILE_NAME, CLASS, FALSE, NULL) AS FEATURES
   FROM SOURCE_METADATA
   WHERE CLASS = 'Asthma'
   LIMIT 100;
