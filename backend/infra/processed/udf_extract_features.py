@@ -240,7 +240,7 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
     PACKAGES = ('scipy', 'numpy', 'soundfile')
-    IMPORTS = ('@~/libroza.zip')
+    IMPORTS = ('@M2_ISD_EQUIPE_1_DB.PUBLIC.STG_LIBRARIES/libs/libroza.zip')
     HANDLER = 'extract_features_handler'
     AS $$
     import sys
