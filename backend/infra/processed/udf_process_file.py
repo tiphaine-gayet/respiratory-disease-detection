@@ -297,27 +297,6 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
         session: Snowflake session
         udf_name: Name for the UDF in Snowflake
     """
-    # Create metadata table
-    session.sql("""
-        CREATE TABLE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.USER_RESPIRATORY_SOUNDS_METADATA (
-            FILE_NAME VARCHAR,
-            CLASS VARCHAR,
-            ACTION VARCHAR,
-            ORIGINAL_DURATION_S FLOAT,
-            STRIPPED_DURATION_S FLOAT,
-            FINAL_DURATION_S FLOAT,
-            LEADING_SILENCE_S FLOAT,
-            TRAILING_SILENCE_S FLOAT,
-            SAMPLE_RATE INT,
-            N_SAMPLES INT,
-            AMPLITUDE_MAX FLOAT,
-            RMS FLOAT,
-            CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP(),
-            PRIMARY KEY (FILE_NAME, CLASS)
-        )
-    """).collect()
-    print("✓ Metadata table created/verified: RESPIRATORY_SOUNDS_METADATA")
-    
     # Register UDF via SQL with inline Python code
     udf_sql = textwrap.dedent(f"""
     CREATE OR REPLACE FUNCTION {udf_name}(file_name VARCHAR, stage_name VARCHAR, class_name VARCHAR)

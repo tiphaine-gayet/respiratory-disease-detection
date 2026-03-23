@@ -60,54 +60,6 @@ def setup_snowflake_session():
     return Session.builder.configs(connection_params).create()
 
 
-def setup_metadata_tables(session):
-    """
-    Create additional metadata tables for processing results.
-    
-    Note: RESPIRATORY_SOUNDS_METADATA is created automatically by PROCESS_FILE_UDF.
-    
-    Args:
-        session: Snowflake session
-    """
-    # RESPIRATORY_FEATURES_METADATA table
-    session.sql("""
-        CREATE TABLE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_FEATURES_METADATA (
-            FILE_NAME VARCHAR,
-            CLASS VARCHAR,
-            ACTION VARCHAR,
-            ORIGINAL_DURATION_S FLOAT,
-            STRIPPED_DURATION_S FLOAT,
-            FINAL_DURATION_S FLOAT,
-            LEADING_SILENCE_S FLOAT,
-            TRAILING_SILENCE_S FLOAT,
-            SAMPLE_RATE INT,
-            N_SAMPLES INT,
-            AMPLITUDE_MAX FLOAT,
-            RMS FLOAT,
-            CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (FILE_NAME, CLASS)
-        )
-    """).collect()
-    print("✓ Table RESPIRATORY_FEATURES_METADATA created/verified")
-    
-    # RESPIRATORY_FEATURES_EXTRACTED table
-    session.sql("""
-        CREATE TABLE IF NOT EXISTS M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_FEATURES_EXTRACTED (
-            FILE_NAME VARCHAR,
-            CLASS VARCHAR,
-            FEATURE_TYPE VARCHAR,
-            FEATURE_SHAPE ARRAY,
-            FEATURE_DTYPE VARCHAR,
-            N_FRAMES INT,
-            N_COEFFICIENTS INT,
-            NPY_FILENAME VARCHAR,
-            CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (FILE_NAME, CLASS, FEATURE_TYPE)
-        )
-    """).collect()
-    print("✓ Table RESPIRATORY_FEATURES_EXTRACTED created/verified")
-
-
 def main():
     """Deploy both UDFs to Snowflake."""
     try:
@@ -116,7 +68,7 @@ def main():
         print("=" * 70)
         
         # Create session
-        print("\n[1/5] Connecting to Snowflake...")
+        print("\n[1/4] Connecting to Snowflake...")
         session = setup_snowflake_session()
         print("✓ Connected to Snowflake")
         
@@ -127,20 +79,16 @@ def main():
         print(f"  Warehouse: {info[0][2]}")
         
         # Deploy UDF 1: Process File
-        print("\n[2/5] Deploying PROCESS_FILE_UDF...")
+        print("\n[2/4] Deploying PROCESS_FILE_UDF...")
         deploy_udf_process_file(session, "PROCESS_FILE_UDF")
         
         # Deploy UDF 2: Extract Features
-        print("\n[3/5] Deploying EXTRACT_FEATURES_UDF...")
+        print("\n[3/4] Deploying EXTRACT_FEATURES_UDF...")
         deploy_udf_extract_features(session, "EXTRACT_FEATURES_UDF")
 
         # Deploy UDF 3: Model Inference
-        print("\n[4/5] Deploying CALL_MODEL_UDF...")
+        print("\n[4/4] Deploying CALL_MODEL_UDF...")
         deploy_prediction_udf_stack(session, "CALL_MODEL_UDF")
-        
-        # Setup metadata tables
-        print("\n[5/5] Setting up metadata tables...")
-        setup_metadata_tables(session)
         
         # Print summary
         print("\n" + "=" * 70)
