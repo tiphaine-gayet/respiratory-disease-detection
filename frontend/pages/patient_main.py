@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 from components.audio import load_audio, preprocess_audio
-from components.charts import waveform_chart, mel_spectrogram, radar_chart
+from components.charts import waveform_chart, mel_spectrogram
 
 
 def render_patient():
@@ -102,9 +102,6 @@ def render_patient():
             )
             st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
 
-            # ── Two columns: Probabilités + Radar ──
-            col_prob, col_radar = st.columns(2)
-
             # TODO: Replace fake data with model predictions
             # e.g. probas = model.predict(audio, sr)
             probas = [
@@ -114,43 +111,33 @@ def render_patient():
                 ("Bronchite", 7, "bronchi"),
                 ("Sain", 3, "healthy"),
             ]
-            radar_data = {name: pct for name, pct, _ in probas}
 
-            with col_prob:
-                rows_html = ""
-                for name, pct, cls in probas:
-                    rows_html += f"""
-                    <div class="proba-row">
-                        <div class="proba-top">
-                            <span class="proba-name">{name}</span>
-                            <span class="proba-pct proba-{cls}">{pct}%</span>
-                        </div>
-                        <div class="proba-bar-track">
-                            <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
-                        </div>
-                    </div>"""
-
-                st.markdown(
-                    f"""
-                    <div class="p-result-card">
-                        <div class="p-result-title">Probabilités par classe</div>
-                        <div class="proba-list">{rows_html}</div>
+            rows_html = ""
+            for name, pct, cls in probas:
+                rows_html += f"""
+                <div class="proba-row">
+                    <div class="proba-top">
+                        <span class="proba-name">{name}</span>
+                        <span class="proba-pct proba-{cls}">{pct}%</span>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with col_radar:
-                st.markdown(
-                    """
-                    <div class="p-result-card" style="padding-bottom:8px;">
-                        <div class="p-result-title">Distribution des probabilités</div>
+                    <div class="proba-bar-track">
+                        <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                st.pyplot(radar_chart(radar_data), use_container_width=True)
+                </div>
+                """
 
+            st.markdown(
+                f"""
+                <div class="p-result-card">
+                    <div class="p-result-title">Probabilités par classe</div>
+                    <div class="proba-list">
+                        {rows_html}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            
             # ── Recommandation ──
             # TODO: Generate recommendation text dynamically from model output
             st.markdown(
