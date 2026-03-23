@@ -77,6 +77,30 @@ footer { display: none !important; }
 /* ============================= */
 /* PATIENT UI                    */
 /* ============================= */
+/* Hide default English text */
+[data-testid="stFileUploader"] section div {
+    visibility: hidden;
+}
+
+/* Replace with French */
+[data-testid="stFileUploader"] section::before {
+    content: "Glissez-déposez votre fichier ici";
+    display: block;
+    text-align: center;
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 6px;
+}
+
+/* Replace file types text */
+[data-testid="stFileUploader"] section::after {
+    content: "Formats acceptés : WAV, MP3, FLAC (max 200MB)";
+    display: block;
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+}
+
 .patient-wrap {
     background: var(--tessan-navy);
     padding: 40px 32px 60px;
