@@ -91,7 +91,8 @@ def deploy_udf_call_model(session, udf_name: str = "CALL_MODEL_UDF") -> None:
       ) -> VARIANT
     """
     udf_sql = textwrap.dedent(
-        "CREATE OR REPLACE FUNCTION " + udf_name + """(
+        """
+        CREATE OR REPLACE FUNCTION __UDF_NAME__(
             mel_json STRING,
             mfcc_json STRING,
             user_id STRING,
@@ -208,7 +209,7 @@ def deploy_udf_call_model(session, udf_name: str = "CALL_MODEL_UDF") -> None:
             }
         $$
         """
-    )
+    ).replace("__UDF_NAME__", udf_name)
 
     session.sql(udf_sql).collect()
 
