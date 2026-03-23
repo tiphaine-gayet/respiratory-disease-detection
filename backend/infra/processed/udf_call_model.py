@@ -16,7 +16,7 @@ from __future__ import annotations
 import textwrap
 from typing import Any, Dict
 
-PREDICTION_TABLE = "M2_ISD_EQUIPE_1_DB.PROCESSED.PREDICTIONS"
+PREDICTION_TABLE = "M2_ISD_EQUIPE_1_DB.TEST.PREDICTIONS"
 
 
 def create_prediction_table(session, table_name: str = PREDICTION_TABLE) -> None:

@@ -258,7 +258,7 @@ def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
                     'RMS': meta.get("RMS"),
                 }])
                 session.create_dataframe(df).write.mode("append").save_as_table(
-                    "M2_ISD_EQUIPE_1_DB.PROCESSED.USER_RESPIRATORY_SOUNDS_METADATA",
+                    "M2_ISD_EQUIPE_1_DB.TEST.USER_RESPIRATORY_SOUNDS_METADATA",
                     create_temp_table=False
                 )
         except Exception as insert_error:

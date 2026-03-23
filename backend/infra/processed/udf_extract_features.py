@@ -140,7 +140,7 @@ def extract_features_udf(
     file_name: str,
     class_name: str,
     save_to_stage: bool = False,
-    output_stage: str = "@M2_ISD_EQUIPE_1_DB.PROCESSED.STG_RESPIRATORY_FEATURES"
+    output_stage: str = "@M2_ISD_EQUIPE_1_DB.TEST.STG_RESPIRATORY_FEATURES"
 ) -> dict:
     """
     Snowflake UDF to extract audio features.
