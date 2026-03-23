@@ -25,7 +25,7 @@ FOLDERS = {
 def create_stage(client):
     """Create the Snowflake stage if it doesn't exist."""
     client.execute(f"""
-        CREATE OR ALTER STAGE {STAGE_FULL_PATH}
+        CREATE STAGE {STAGE_FULL_PATH} IF NOT EXISTS
     """)
     print(f"✅ Stage {STAGE_FULL_PATH} created (if not exists).")
 
