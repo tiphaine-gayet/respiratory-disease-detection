@@ -226,15 +226,90 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
         session: Snowflake session
         udf_name: Name for the UDF in Snowflake
     """
-    session.udf.register(
-        extract_features_udf,
-        input_types=[StringType(), StringType(), StringType(), StringType(), BooleanType(), StringType()],
-        return_type=VariantType(),
-        name=udf_name,
-        is_permanent=True,
-        replace=True,
-        stage_location="@~/",
+    # Register UDF via SQL with inline Python code
+    udf_sql = f"""
+    CREATE OR REPLACE FUNCTION {udf_name}(
+        processed_audio_path VARCHAR,
+        stage_name VARCHAR,
+        file_name VARCHAR,
+        class_name VARCHAR,
+        save_to_stage BOOLEAN,
+        output_stage VARCHAR
     )
+    RETURNS VARIANT
+    LANGUAGE PYTHON
+    RUNTIME_VERSION = '3.11'
+    PACKAGES = ('librosa', 'soundfile', 'numpy')
+    HANDLER = 'extract_features_handler'
+    AS $$
+    import numpy as np
+    import librosa
+    
+    def extract_features(y, sr):
+        n_mels = 128
+        n_fft = 2048
+        hop_length = 512
+        n_mfcc = 13
+        
+        features = {{
+            "mel": librosa.power_to_db(
+                librosa.feature.melspectrogram(
+                    y=y, sr=sr, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length),
+                ref=np.max),
+            "mfcc": librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc),
+            "chroma": librosa.feature.chroma_stft(y=y, sr=sr),
+            "centroid": librosa.feature.spectral_centroid(y=y, sr=sr),
+            "bandwidth": librosa.feature.spectral_bandwidth(y=y, sr=sr),
+            "zcr": librosa.feature.zero_crossing_rate(y),
+        }}
+        
+        return features
+    
+    def extract_features_handler(
+        processed_audio_path: str,
+        stage_name: str,
+        file_name: str,
+        class_name: str,
+        save_to_stage: bool,
+        output_stage: str
+    ) -> dict:
+        try:
+            if not stage_name.endswith('/'):
+                stage_name = stage_name + '/'
+            file_path = stage_name + processed_audio_path
+            
+            y, sr = librosa.load(file_path, sr=None)
+            features = extract_features(y, sr)
+            
+            result = {{
+                "FILE_NAME": file_name,
+                "CLASS": class_name,
+                "STAGE": stage_name,
+                "STATUS": "SUCCESS",
+                "FEATURES": {{}}
+            }}
+            
+            for feat_type, feat_data in features.items():
+                result["FEATURES"][feat_type] = {{
+                    "shape": list(feat_data.shape),
+                    "dtype": str(feat_data.dtype),
+                    "n_frames": feat_data.shape[1] if len(feat_data.shape) > 1 else 1,
+                    "n_coefficients": feat_data.shape[0] if len(feat_data.shape) > 0 else 1,
+                }}
+            
+            return result
+            
+        except Exception as e:
+            return {{
+                "FILE_NAME": file_name,
+                "CLASS": class_name,
+                "STATUS": "ERROR",
+                "ERROR": str(e)[:500],
+            }}
+    $$
+    """
+    
+    session.sql(udf_sql).collect()
     print(f"✓ UDF registered: {udf_name}")
 
 

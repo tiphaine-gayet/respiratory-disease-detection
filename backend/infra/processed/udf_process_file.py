@@ -317,18 +317,138 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     """).collect()
     print("✓ Metadata table created/verified: RESPIRATORY_SOUNDS_METADATA")
     
-    # Register UDF
-    session.udf.register(
-        process_file_udf,
-        input_types=[StringType(), StringType(), StringType()],
-        return_type=VariantType(),
-        name=udf_name,
-        is_permanent=True,
-        replace=True,
-        stage_location="@~/",
-    )
+    # Register UDF via SQL with inline Python code
+    udf_sql = f"""
+    CREATE OR REPLACE FUNCTION {udf_name}(file_name VARCHAR, stage_name VARCHAR, class_name VARCHAR)
+    RETURNS VARIANT
+    LANGUAGE PYTHON
+    RUNTIME_VERSION = '3.11'
+    PACKAGES = ('librosa', 'soundfile', 'scipy', 'numpy', 'pandas')
+    HANDLER = 'process_file_udf_handler'
+    AS $$
+    import sys
+    import os
+    import io
+    import zipfile
+    import numpy as np
+    import warnings
+    from scipy.signal import butter, filtfilt
+    import librosa
+    import pandas as pd
+    
+    warnings.filterwarnings('ignore')
+    
+    CONFIG = {{
+        "TARGET_SR": 22050,
+        "MIN_DURATION_S": 4,
+        "TARGET_DURATION_S": 6,
+        "SILENCE_DB": 30,
+        "BANDPASS_LOW": 100,
+        "BANDPASS_HIGH": 2000,
+    }}
+    
+    def bandpass_filter(y, sr, low=100, high=2000, order=4):
+        min_samples = 3 * order * 2 + 1
+        if len(y) < min_samples:
+            return y
+        nyq = sr / 2
+        b, a = butter(order, [low / nyq, high / nyq], btype='band')
+        return filtfilt(b, a, y)
+    
+    def trim_silence(y, sr, top_db=30):
+        _, indices = librosa.effects.trim(y, top_db=top_db)
+        y_trimmed = y[indices[0]:indices[1]]
+        leading_s = indices[0] / sr
+        trailing_s = (len(y) - indices[1]) / sr
+        return y_trimmed, leading_s, trailing_s
+    
+    def pad_or_crop(y, sr, target_s=6):
+        target = int(target_s * sr)
+        if len(y) < target:
+            return np.pad(y, (0, target - len(y)))
+        return y[:target]
+    
+    def normalize_amplitude(y, target_peak=0.95):
+        peak = np.max(np.abs(y))
+        if peak > 0:
+            return y / peak * target_peak
+        return y
+    
+    def process_file(y_raw, sr_raw, file_name, class_name):
+        original_duration = len(y_raw) / sr_raw
+        
+        if sr_raw != 22050:
+            y = librosa.resample(y_raw, orig_sr=sr_raw, target_sr=22050)
+            sr = 22050
+        else:
+            y, sr = y_raw.copy(), sr_raw
+        
+        y = bandpass_filter(y, sr)
+        y, leading_s, trailing_s = trim_silence(y, sr)
+        stripped_duration = len(y) / sr
+        y = pad_or_crop(y, sr)
+        y = normalize_amplitude(y)
+        
+        target_samples = int(6 * sr)
+        if leading_s > 0 and trailing_s > 0:
+            action = "STRIPPED_BOTH_ENDS"
+        elif leading_s > 0:
+            action = "STRIPPED_LEADING"
+        elif trailing_s > 0:
+            action = "STRIPPED_TRAILING"
+        elif len(y) == target_samples and original_duration * sr > target_samples:
+            action = "CROPPED"
+        elif len(y) == target_samples and original_duration * sr < target_samples:
+            action = "PADDED"
+        else:
+            action = "PROCESSED"
+        
+        meta = {{
+            "FILE_NAME": file_name,
+            "CLASS": class_name,
+            "ACTION": action,
+            "ORIGINAL_DURATION_S": round(original_duration, 4),
+            "STRIPPED_DURATION_S": round(stripped_duration, 4),
+            "FINAL_DURATION_S": round(len(y) / sr, 4),
+            "LEADING_SILENCE_S": round(leading_s, 4),
+            "TRAILING_SILENCE_S": round(trailing_s, 4),
+            "SAMPLE_RATE": sr,
+            "N_SAMPLES": len(y),
+            "AMPLITUDE_MAX": round(float(np.max(np.abs(y))), 6),
+            "RMS": round(float(np.sqrt(np.mean(y**2))), 6),
+        }}
+        return y, sr, meta
+    
+    def process_file_udf_handler(file_name: str, stage_name: str, class_name: str) -> dict:
+        try:
+            if not stage_name.endswith('/'):
+                stage_name = stage_name + '/'
+            file_path = stage_name + file_name
+            
+            y, sr = librosa.load(file_path, sr=None)
+            y_proc, sr_proc, meta = process_file(y, sr, file_name, class_name)
+            
+            return {{
+                "FILE_NAME": file_name,
+                "CLASS": class_name,
+                "STAGE": stage_name,
+                "STATUS": "SUCCESS" if y_proc is not None else "REJECTED",
+                "ACTION": meta.get("ACTION"),
+                "METADATA": meta,
+            }}
+        except Exception as e:
+            return {{
+                "FILE_NAME": file_name,
+                "CLASS": class_name,
+                "STAGE": stage_name,
+                "STATUS": "ERROR",
+                "ERROR": str(e)[:500],
+            }}
+    $$
+    """
+    
+    session.sql(udf_sql).collect()
     print(f"✓ UDF registered: {udf_name}")
-    print(f"  → UDF will automatically insert metadata into USER_RESPIRATORY_SOUNDS_METADATA")
 
 
 if __name__ == "__main__":
