@@ -1,13 +1,17 @@
-.PHONY: help venv download_dataset raw
+.PHONY: help venv download_dataset raw app ingested infra
 
 help:
 	@echo "📋 Asthma Detection Dataset - Snowflake Commands"
 	@echo ""
-	@echo "Setup:"
+	@echo "Setup local environment:"
 	@echo "  make venv              - Create virtual environment and install dependencies"
 	@echo "  make download_dataset  - Download and prepare the asthma detection dataset"
+	@echo ""
+	@echo "Setup Snowflake environment:"
+	@echo "  make infra             - Run all infrastructure setup steps (raw, ingested, app)"
 	@echo "  make raw               - Transfer raw audio files and metadata to Snowflake"
-	@echo "  make public            - Load public data (pharmacies in France) into Snowflake"
+	@echo "  make app               - Set up predictions table and load data used in app (pharmacies in France) into Snowflake"
+	@echo "  make ingested          - Create INGESTED schema (ingested audio files, extracted features, and metadata)"
 	@echo ""
 
 venv:
@@ -33,5 +37,25 @@ raw:
 	@python -m backend.infra.raw.table_respiratory_sounds_metadata
 	@echo "✅ Metadata ingested successfully!"
 
-public:
-	@python -m backend.infra.public.load_pharmacies_france
+app:
+	@echo "🚀 Deploying APP schema resources..."
+	@python -m backend.infra.app.load_pharmacies_france
+	@python -m backend.infra.app.table_predictions
+	@echo "✅ Done!"
+
+ingested:
+	@echo "🚀 Deploying INGESTED schema resources..."
+	@python -m backend.infra.ingested.stg_ingested_sounds
+	@python -m backend.infra.ingested.stg_ingested_sounds_processed
+	@python -m backend.infra.ingested.stg_ingested_features
+	@python -m backend.infra.ingested.table_ingested_sounds_metadata
+	@python -m backend.infra.ingested.table_ingested_features_metadata
+	@python -m backend.infra.ingested.table_ingested_sounds_processed_metadata
+	@python -m backend.infra.ingested.view_ingested_inference_data
+	@echo "✅ Done!"
+	
+infra:
+	@python -m backend.infra.schemas
+	@make raw
+	@make ingested
+	@make app
