@@ -52,7 +52,7 @@ def log_prediction_result(session, result: Dict[str, Any], table_name: str = PRE
     row = {
         "PREDICTION_ID": result.get("prediction_id"),
         "USER_ID": result.get("user_id"),
-        "DEVICE_ID": result.get("device_id"),
+        "DEVICE_ID": result.get("device_id", "0000"),
         "PREDICTED_CLASS": result.get("predicted_class"),
         "CONFIDENCE": result.get("confidence", 0.0),
         "PROB_ASTHMA": probs.get("Asthma", 0.0),
@@ -91,8 +91,7 @@ def deploy_udf_call_model(session, udf_name: str = "CALL_MODEL_UDF") -> None:
       ) -> VARIANT
     """
     udf_sql = textwrap.dedent(
-        f"""
-        CREATE OR REPLACE FUNCTION {udf_name}(
+        "CREATE OR REPLACE FUNCTION " + udf_name + """(
             mel_json STRING,
             mfcc_json STRING,
             user_id STRING,
@@ -195,7 +194,7 @@ def deploy_udf_call_model(session, udf_name: str = "CALL_MODEL_UDF") -> None:
                 "status": "SUCCESS",
                 "prediction_id": str(uuid.uuid4()),
                 "user_id": user_id,
-                "device_id": "device_id",
+                "device_id": "0000",
                 "predicted_class": predicted,
                 "confidence": round(confidence, 6),
                 "probabilities": {k: round(v, 6) for k, v in prob_map.items()},
