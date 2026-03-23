@@ -15,7 +15,7 @@ def deploy():
         user=os.getenv('SNOWFLAKE_USERNAME'),
         password=os.getenv('SNOWFLAKE_PASSWORD'),
         account=os.getenv('SNOWFLAKE_ACCOUNT'),
-        role='ACCOUNTADMIN'
+        role='M2_ISD_EQUIPE_1_ROLE'
     )
 
     cur = None
