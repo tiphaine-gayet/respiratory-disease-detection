@@ -18,7 +18,7 @@ def create_table(client):
             file_name              VARCHAR        NOT NULL,   -- processed filename in STG_INGESTED_SOUNDS_PROCESSED
             original_file_name     VARCHAR        NOT NULL,   -- FK → INGESTED_SOUNDS_METADATA.file_name
             patient_id             VARCHAR(15)    NOT NULL,
-            pharmacie_siret        VARCHAR(14),
+            pharmacie_id           VARCHAR(14),
             action                 VARCHAR,                   -- preprocessing action (e.g. 'strip_silence', 'pad')
             original_duration_s    FLOAT,
             stripped_duration_s    FLOAT,

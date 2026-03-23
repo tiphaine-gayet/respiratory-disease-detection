@@ -21,7 +21,7 @@ def create_table(client):
             file_name              VARCHAR        NOT NULL,   -- FK → INGESTED_SOUNDS_PROCESSED_METADATA.file_name
             original_file_name     VARCHAR        NOT NULL,   -- FK → INGESTED_SOUNDS_METADATA.file_name
             patient_id             VARCHAR(15)    NOT NULL,
-            pharmacie_siret        VARCHAR(14),
+            pharmacie_id           VARCHAR(14),
             feature_type           VARCHAR        NOT NULL,   -- mel | mfcc | chroma | centroid | bandwidth | zcr
             npy_filename           VARCHAR        NOT NULL,   -- .npy file path in STG_INGESTED_FEATURES
             extracted_at           TIMESTAMP_NTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP(),

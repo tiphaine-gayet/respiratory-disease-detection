@@ -22,7 +22,7 @@ def create_table(client):
 
             -- Patient & pharmacy
             patient_id        VARCHAR(15)    NOT NULL,  -- numéro de sécurité sociale
-            pharmacie_siret   VARCHAR(14),              -- OSM_ID from PUBLIC.PHARMACIES_FRANCE
+            pharmacie_id   VARCHAR(14),              -- OSM_ID from PUBLIC.PHARMACIES_FRANCE
 
             -- Source audio (FK to ingested layer)
             audio_file_name   VARCHAR        NOT NULL,  -- FK → INGESTED.INGESTED_SOUNDS_METADATA.file_name
