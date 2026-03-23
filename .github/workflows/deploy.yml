@@ -27,11 +27,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
       - name: Syntax Check
         run: python -m py_compile backend/infra/deploy/deploy_infrastructure.py
 
@@ -52,7 +47,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install \
+            "snowflake-connector-python>=3.12,<4" \
+            "snowflake-snowpark-python==1.26.0" \
+            "numpy" \
+            "pandas" \
+            "scipy" \
+            "librosa" \
+            "soundfile"
 
       - name: Deploy Infrastructure
         env:
@@ -69,4 +71,4 @@ jobs:
           SNOWFLAKE_DATABASE: M2_ISD_EQUIPE_1_DB
           SNOWFLAKE_SCHEMA: PROCESSED
           SNOWFLAKE_WAREHOUSE: COMPUTE_WH
-        run: python backend/infra/deploy/deploy_dual_udfs.py
+        run: python scripts/deploy_dual_udfs.py
