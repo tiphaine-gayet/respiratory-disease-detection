@@ -7,8 +7,8 @@ def deploy():
     with open('config/snowflake_config.json', 'r') as f:
         config = json.load(f)
 
-    db = config['database'].upper()
-    wh = config['warehouse'].upper()
+    db = 'M2_ISD_EQUIPE_1_DB'  # config['database'].upper() --- IGNORE ---
+    wh = 'COMPUTE_WH'  # config['warehouse'].upper() --- IGNORE ---
 
     # 2. Connexion
     conn = snowflake.connector.connect(

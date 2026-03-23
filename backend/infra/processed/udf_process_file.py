@@ -323,7 +323,8 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     RETURNS VARIANT
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
-    PACKAGES = ('librosa', 'soundfile', 'scipy', 'numpy', 'pandas')
+    PACKAGES = ('scipy', 'numpy', 'pandas', 'soundfile')
+    IMPORTS = ('@~/libroza.zip')
     HANDLER = 'process_file_udf_handler'
     AS $$
     import sys
@@ -333,8 +334,30 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     import numpy as np
     import warnings
     from scipy.signal import butter, filtfilt
-    import librosa
     import pandas as pd
+    
+    # Setup librosa from imported zip
+    def _setup_librosa():
+        try:
+            import_dir = sys._xoptions.get("snowflake_import_directory")
+            if import_dir:
+                zip_path = os.path.join(import_dir, "libroza.zip")
+                if os.path.exists(zip_path):
+                    final_lib_dir = "/tmp/site-packages"
+                    os.makedirs(final_lib_dir, exist_ok=True)
+                    with zipfile.ZipFile(zip_path, 'r') as outer:
+                        for name in outer.namelist():
+                            if name.endswith(".whl"):
+                                whl_bytes = outer.read(name)
+                                with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
+                                    whl.extractall(final_lib_dir)
+                    if final_lib_dir not in sys.path:
+                        sys.path.insert(0, final_lib_dir)
+        except Exception:
+            pass
+    
+    _setup_librosa()
+    import librosa
     
     warnings.filterwarnings('ignore')
     
