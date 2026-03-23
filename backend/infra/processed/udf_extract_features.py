@@ -28,6 +28,7 @@ import io
 import zipfile
 import json
 import base64
+import textwrap
 
 # Import Snowpark types
 from snowflake.snowpark.types import StringType, VariantType, BooleanType
@@ -227,7 +228,7 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
         udf_name: Name for the UDF in Snowflake
     """
     # Register UDF via SQL with inline Python code
-    udf_sql = f"""
+    udf_sql = textwrap.dedent(f"""
     CREATE OR REPLACE FUNCTION {udf_name}(
         processed_audio_path VARCHAR,
         stage_name VARCHAR,
@@ -334,7 +335,7 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
                 "ERROR": str(e)[:500],
             }}
     $$
-    """
+    """)
     
     session.sql(udf_sql).collect()
     print(f"✓ UDF registered: {udf_name}")

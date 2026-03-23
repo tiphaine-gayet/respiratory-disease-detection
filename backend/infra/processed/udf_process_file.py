@@ -27,6 +27,7 @@ import os
 import io
 import zipfile
 import json
+import textwrap
 
 # Get Snowflake session for metadata insertion
 try:
@@ -318,7 +319,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     print("✓ Metadata table created/verified: RESPIRATORY_SOUNDS_METADATA")
     
     # Register UDF via SQL with inline Python code
-    udf_sql = f"""
+    udf_sql = textwrap.dedent(f"""
     CREATE OR REPLACE FUNCTION {udf_name}(file_name VARCHAR, stage_name VARCHAR, class_name VARCHAR)
     RETURNS VARIANT
     LANGUAGE PYTHON
@@ -468,7 +469,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
                 "ERROR": str(e)[:500],
             }}
     $$
-    """
+    """)
     
     session.sql(udf_sql).collect()
     print(f"✓ UDF registered: {udf_name}")
