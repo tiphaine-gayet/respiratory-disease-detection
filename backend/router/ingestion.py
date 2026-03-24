@@ -11,6 +11,7 @@ import numpy as np
 
 from backend.utils.snowflake_client import SnowflakeClient
 from backend.router.preprocessing import process_and_store_ingested_audio
+from backend.router.inference import run_inference_and_store
 
 
 _DB     = os.getenv("SNOWFLAKE_DATABASE")
@@ -181,10 +182,16 @@ def upload_patient_audio_with_metadata(
         audio=audio,
         sr=sr,
     )
-    process_and_store_ingested_audio(
+    mel_npy_filename = process_and_store_ingested_audio(
         original_file_name=stage_file_name,
         patient_id=patient_id,
         pharmacie_id=pharmacie_id,
         audio_bytes=audio_bytes,
+    )
+    run_inference_and_store(
+        mel_npy_filename=mel_npy_filename,
+        patient_id=patient_id,
+        pharmacie_id=pharmacie_id,
+        audio_file_name=stage_file_name,
     )
     return stage_file_name, metadata

@@ -37,6 +37,19 @@ def create_table(client):
     """)
     print(f"✅ Table {DATABASE}.{SCHEMA}.{TABLE} created (if not exists).")
 
+    # Migration: add mel_npy_filename if table already exists without it
+    client.execute(f"""
+        ALTER TABLE {DATABASE}.{SCHEMA}.{TABLE}
+        ADD COLUMN IF NOT EXISTS mel_npy_filename VARCHAR
+    """)
+
+    # Migration: remove old mel_spectrogram VARIANT column if still present
+    client.execute(f"""
+        ALTER TABLE {DATABASE}.{SCHEMA}.{TABLE}
+        DROP COLUMN IF EXISTS mel_spectrogram
+    """)
+    print(f"✅ Table {DATABASE}.{SCHEMA}.{TABLE} schema up to date.")
+
 
 if __name__ == "__main__":
     print("🚀 Setting up ingested processed sounds metadata table...")

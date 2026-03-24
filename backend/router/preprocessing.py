@@ -239,6 +239,6 @@ def process_and_store_ingested_audio(
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    return processed_file_name
+    return mel_npy_filename
 
 
