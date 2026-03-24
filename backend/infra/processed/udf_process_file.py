@@ -354,6 +354,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
             return "✅ Librosa importée — version: " + librosa.__version__
         except Exception as e:
             return f"❌ Erreur import librosa"
+            
     _setup_librosa()
     import librosa
     
