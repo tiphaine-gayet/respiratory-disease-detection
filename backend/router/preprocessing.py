@@ -1,5 +1,4 @@
 import io
-import json
 import os
 import shutil
 import tempfile
@@ -21,6 +20,7 @@ SCHEMA_INGESTED = os.getenv("SNOWFLAKE_SCHEMA_INGESTED")
 # ── Stages ────────────────────────────────────────────────────────────────────
 SOURCE_STAGE      = f"@{DATABASE}.{SCHEMA_INGESTED}.STG_INGESTED_SOUNDS"
 PROCESSED_STAGE   = f"@{DATABASE}.{SCHEMA_INGESTED}.STG_PROCESSED_SOUNDS"
+MEL_NPY_STAGE     = f"@{DATABASE}.{SCHEMA_INGESTED}.STG_MEL_NPY"
 
 # ── Tables ────────────────────────────────────────────────────────────────────
 SOURCE_METADATA_TABLE  = f"{DATABASE}.{SCHEMA_INGESTED}.INGESTED_SOUNDS_METADATA"
@@ -190,41 +190,16 @@ def process_and_store_ingested_audio(
 
     stem = os.path.splitext(original_file_name)[0]
     processed_file_name = f"{stem}_processed.wav"
+    mel_npy_filename    = f"{stem}_mel.npy"
 
-    # 4 & 5. Write local files, stage them, load metadata via COPY INTO.
-    #
-    # PARSE_JSON(<large_literal>) causes a SQL compilation error once the JSON
-    # string exceeds a few hundred KB. For a 128×258 mel the serialized JSON is
-    # ~660 KB — well over that limit. The standard Snowflake pattern for loading
-    # large semi-structured values is to stage the data as a file and use
-    # COPY INTO … FROM (SELECT … FROM @stage), which reads the VARIANT from the
-    # file rather than embedding it as a SQL literal.
+    # 4 & 5. Write local files, stage them, insert metadata row.
     temp_dir = Path(tempfile.mkdtemp(prefix="resp-proc-"))
     try:
-        # Processed audio file
         wav_file = temp_dir / processed_file_name
         sf.write(str(wav_file), y, sr, subtype="PCM_16")
 
-        # Full metadata row as one JSON object — mel stays a nested array,
-        # Snowflake reads it as VARIANT when COPY INTO parses the file.
-        row_json_file = temp_dir / f"{stem}_row.json"
-        row_json_file.write_text(json.dumps({
-            "file_name":           processed_file_name,
-            "original_file_name":  original_file_name,
-            "patient_id":          str(patient_id).strip(),
-            "pharmacie_id":        str(pharmacie_id).strip() if pharmacie_id else None,
-            "action":              meta["ACTION"],
-            "original_duration_s": meta["ORIGINAL_DURATION_S"],
-            "stripped_duration_s": meta["STRIPPED_DURATION_S"],
-            "final_duration_s":    meta["FINAL_DURATION_S"],
-            "leading_silence_s":   meta["LEADING_SILENCE_S"],
-            "trailing_silence_s":  meta["TRAILING_SILENCE_S"],
-            "sample_rate":         meta["SAMPLE_RATE"],
-            "n_samples":           meta["N_SAMPLES"],
-            "amplitude_max":       meta["AMPLITUDE_MAX"],
-            "rms":                 meta["RMS"],
-            "mel_spectrogram":      mel.tolist(),
-        }))
+        npy_file = temp_dir / mel_npy_filename
+        np.save(str(npy_file), mel)
 
         with SnowflakeClient() as client:
             cur = client.cursor()
@@ -236,46 +211,29 @@ def process_and_store_ingested_audio(
                     " AUTO_COMPRESS=FALSE OVERWRITE=FALSE"
                 )
 
-                # PUT row JSON to user stage (@~/) for the COPY INTO below
-                row_stage_path = f"@~/resp_proc_rows/{row_json_file.name}"
+                # PUT mel .npy to STG_MEL_NPY
+                cur.execute(f"CREATE STAGE IF NOT EXISTS {MEL_NPY_STAGE.lstrip('@')}")
                 cur.execute(
-                    f"PUT 'file://{row_json_file.as_posix()}' @~/resp_proc_rows/"
-                    " AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+                    f"PUT 'file://{npy_file.as_posix()}' {MEL_NPY_STAGE}"
+                    " AUTO_COMPRESS=FALSE OVERWRITE=FALSE"
                 )
 
-                # COPY INTO reads the mel from the staged file, avoiding the
-                # PARSE_JSON(<large_literal>) SQL compilation limit.
+                # INSERT metadata row (plain values — no VARIANT, no staging workaround)
                 cur.execute(f"""
-                    COPY INTO {PROC_METADATA_TABLE} (
+                    INSERT INTO {PROC_METADATA_TABLE} (
                         file_name, original_file_name, patient_id, pharmacie_id,
                         action, original_duration_s, stripped_duration_s, final_duration_s,
                         leading_silence_s, trailing_silence_s, sample_rate, n_samples,
-                        amplitude_max, rms, mel_spectrogram
-                    )
-                    FROM (
-                        SELECT
-                            $1:file_name::VARCHAR,
-                            $1:original_file_name::VARCHAR,
-                            $1:patient_id::VARCHAR,
-                            $1:pharmacie_id::VARCHAR,
-                            $1:action::VARCHAR,
-                            $1:original_duration_s::FLOAT,
-                            $1:stripped_duration_s::FLOAT,
-                            $1:final_duration_s::FLOAT,
-                            $1:leading_silence_s::FLOAT,
-                            $1:trailing_silence_s::FLOAT,
-                            $1:sample_rate::INTEGER,
-                            $1:n_samples::INTEGER,
-                            $1:amplitude_max::FLOAT,
-                            $1:rms::FLOAT,
-                            $1:mel_spectrogram
-                        FROM {row_stage_path}
-                    )
-                    FILE_FORMAT = (TYPE = 'JSON')
-                """)
-
-                # Remove the temp row file from the user stage
-                cur.execute(f"REMOVE {row_stage_path}")
+                        amplitude_max, rms, mel_npy_filename
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    processed_file_name, original_file_name,
+                    str(patient_id).strip(), str(pharmacie_id).strip() if pharmacie_id else None,
+                    meta["ACTION"], meta["ORIGINAL_DURATION_S"], meta["STRIPPED_DURATION_S"],
+                    meta["FINAL_DURATION_S"], meta["LEADING_SILENCE_S"], meta["TRAILING_SILENCE_S"],
+                    meta["SAMPLE_RATE"], meta["N_SAMPLES"], meta["AMPLITUDE_MAX"], meta["RMS"],
+                    mel_npy_filename,
+                ))
             finally:
                 cur.close()
     finally:

@@ -85,20 +85,84 @@ def run_inference(session):
 
         return probs
 
-    def get_action(pred_class, confidence):
-        if pred_class == "Healthy":
-            return "RAS - Patient sain"
-        elif confidence >= 0.85:
-            return f"URGENT - Consulter médecin ({pred_class} très probable)"
-        elif confidence >= 0.60:
-            return f"SURVEILLANCE - Suivi recommandé ({pred_class} probable)"
-        else:
-            return f"INCERTAIN - Téléconsultation conseillée ({pred_class})"
+    def get_action(pred_class: str, confidence: float) -> tuple[str, str]:
+        
+        # Returns (action, detailed_action)
+        # action: "RAS" | "surveillance_7j" | "surveillance_48h" | "consultation_24h" | "urgent_6h"
+        c = confidence  # 0.0 → 1.0
 
+        ACTIONS = {
+            "Healthy": [
+                (0.60, "RAS",
+                "Aucune anomalie détectée. Suivi préventif annuel suffisant. "
+                "Consulter si dyspnée ou toux persistante > 3 semaines."),
+                (0.00, "surveillance_7j",
+                "Profil sain probable mais certitude faible. Consultation de contrôle conseillée si symptômes persistants."),
+            ],
+            "Asthma": [
+                (0.85, "consultation_24h",
+                "Asthme très probable. Consultation sous 24h, traitement de fond (CSI ± LABA) à évaluer. "
+                "Vérifier disponibilité d'un bronchodilatateur d'urgence (salbutamol). "
+                "⚠ SpO₂ < 92% ou crise nocturne → SAMU (15)."),
+                (0.60, "surveillance_48h",
+                "Profil asthmatique probable. Suivi médical 48–72h, spirométrie pour confirmer. "
+                "⚠ Sibilances ou dyspnée aiguë → consultation urgente."),
+                (0.00, "surveillance_7j",
+                "Asthme possible mais incertain. Téléconsultation ou spirométrie recommandée. "
+                "Éviter déclencheurs connus (froid, poussière, effort)."),
+            ],
+            "Pneumonia": [
+                (0.85, "urgent_6h",
+                "Pneumonie très probable. Prise en charge sous 6h, score CRB-65 à évaluer pour hospitalisation. "
+                "⚠ SpO₂ < 90% ou confusion → SAMU (15) immédiat."),
+                (0.60, "consultation_24h",
+                "Pneumonie probable. Consultation dans les 24h, antibiothérapie probable (amoxicilline 1ère intention). "
+                "⚠ SpO₂ < 94% ou FR > 25/min → urgences."),
+                (0.00, "surveillance_48h",
+                "Pneumonie possible. Radio thoracique + bilan biologique (NFS, CRP) nécessaires. "
+                "Surveiller température, fréquence respiratoire et état général."),
+            ],
+            "COPD": [
+                (0.85, "consultation_24h",
+                "BPCO très probable. Consultation pneumologique sous 48h, stadification GOLD indispensable. "
+                "⚠ SpO₂ < 88% → oxygénothérapie + urgences ; exacerbation sévère → hospitalisation."),
+                (0.60, "surveillance_7j",
+                "BPCO probable. Consultation pneumologique sous 7 jours, arrêt du tabac prioritaire. "
+                "Évaluation bronchodilatateurs longue durée (LAMA/LABA), vaccination grippe + pneumocoque. "
+                "⚠ Exacerbation (↑ dyspnée + ↑ expectoration) → consultation sous 24h."),
+                (0.00, "surveillance_7j",
+                "BPCO possible. Spirométrie nécessaire pour confirmer (VEMS/CVF < 0.70 post-bronchodilatateur). "
+                "Évaluer tabagisme et expositions professionnelles."),
+            ],
+            "Bronchitis": [
+                (0.85, "surveillance_48h",
+                "Bronchite aiguë très probable. Consultation sous 48h pour écarter surinfection. "
+                "⚠ FR > 25/min ou SpO₂ < 94% → éliminer pneumonie en urgence."),
+                (0.60, "surveillance_7j",
+                "Bronchite aiguë probable. Généralement virale, résolution en 7–14j. "
+                "Pas d'antibiotiques en 1ère intention sauf expectoration purulente > 10j ou terrain fragile."),
+                (0.00, "surveillance_7j",
+                "Bronchite possible. Traitement symptomatique (repos, hydratation). "
+                "Consulter si fièvre > 38.5°C au-delà de 5 jours."),
+            ],
+        }
+
+        levels = ACTIONS.get(pred_class)
+        if not levels:
+            return "surveillance_7j", f"Classe non reconnue : {pred_class}. Téléconsultation conseillée."
+
+        for threshold, action, detail in levels:
+            if c >= threshold:
+                pct = f"{c:.0%}"
+                return action, f"Détection à {pct} : {detail}"
+
+        return "surveillance_7j", f"Résultat incertain ({pred_class}, {c:.0%}). Téléconsultation conseillée."
+        
     # ── 3. Lire la table : fichiers pas encore prédits ──
     rows = session.sql("""
         SELECT
             m.FILE_NAME,
+            m.MEL_NPY_FILENAME,
             m.PATIENT_ID,
             m.PHARMACIE_ID
         FROM M2_ISD_EQUIPE_1_DB.INGESTED.PROCESSED_SOUNDS_METADATA m
@@ -114,12 +178,13 @@ def run_inference(session):
     ok, errors = 0, []
 
     for row in rows:
-        file_name    = row["FILE_NAME"]       # ex: "patient_001_pharmacie_01.npy"
-        patient_id   = row["PATIENT_ID"]
-        pharmacie_id = row["PHARMACIE_ID"]
+        file_name        = row["FILE_NAME"]
+        mel_npy_filename = row["MEL_NPY_FILENAME"]
+        patient_id       = row["PATIENT_ID"]
+        pharmacie_id     = row["PHARMACIE_ID"]
 
         # Construire le chemin stage vers le .npy
-        stage_path = f"@M2_ISD_EQUIPE_1_DB.INGESTED.STG_PROCESSED_SOUNDS/{file_name}"
+        stage_path = f"@M2_ISD_EQUIPE_1_DB.INGESTED.STG_MEL_NPY/{mel_npy_filename}"
 
         try:
             probs      = predict_from_npy(stage_path)
