@@ -1,0 +1,530 @@
+/* ============================= */
+/* STREAMLIT OVERRIDES           */
+/* Keep minimal — don't nuke all padding */
+/* ============================= */
+
+/* Remove default top padding but keep some breathing room */
+.block-container {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+}
+
+/* Hide Streamlit header/footer */
+header[data-testid="stHeader"] { display: none !important; }
+footer { display: none !important; }
+#MainMenu { display: none !important; }
+
+/* Remove gap between elements */
+.stApp > main > div > div {
+    gap: 0 !important;
+}
+
+/* ============================= */
+/* FONTS                         */
+/* ============================= */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+/* ============================= */
+/* VARIABLES                     */
+/* ============================= */
+:root {
+    --tessan-navy: #2D3F5C;
+    --tessan-coral: #E8714A;
+    --tessan-light: #F4F6FA;
+    --tessan-white: #FFFFFF;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'Space Mono', monospace;
+}
+
+/* ============================= */
+/* MODE SWITCHER (top nav)       */
+/* ============================= */
+.mode-switcher {
+    display: flex;
+    background: var(--tessan-navy);
+    width: 100%;
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 14px 24px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.5);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.mode-btn:hover:not(.active) {
+    color: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.05);
+}
+
+.mode-btn.active {
+    background: var(--tessan-coral);
+    color: white;
+}
+
+/* ============================= */
+/* PATIENT UI                    */
+/* ============================= */
+/* Hide default English text */
+[data-testid="stFileUploader"] section div {
+    visibility: hidden;
+}
+
+/* Replace with French */
+[data-testid="stFileUploader"] section::before {
+    content: "Glissez-déposez votre fichier ici";
+    display: block;
+    text-align: center;
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 6px;
+}
+
+/* Replace file types text */
+[data-testid="stFileUploader"] section::after {
+    content: "Formats acceptés : WAV, MP3, FLAC (max 200MB)";
+    display: block;
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+}
+
+.patient-wrap {
+    background: var(--tessan-navy);
+    padding: 40px 32px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: calc(100vh - 48px); /* subtract nav height */
+    width: 100%;
+    font-family: var(--font);
+}
+
+.patient-logo {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.15em;
+    margin-bottom: 4px;
+}
+
+.patient-logo span {
+    color: var(--tessan-coral);
+}
+
+.patient-tagline {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 40px;
+}
+
+.patient-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 32px;
+    width: 100%;
+    max-width: 520px;
+}
+
+.patient-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: white;
+    margin-bottom: 8px;
+}
+
+.patient-subtitle {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 28px;
+    line-height: 1.5;
+}
+
+/* Steps at bottom */
+.patient-steps {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+    width: 100%;
+    max-width: 520px;
+}
+
+.step-pill {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.step-num {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--tessan-coral);
+    font-family: var(--mono);
+}
+
+.step-text {
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    margin-top: 3px;
+}
+
+/* ============================= */
+/* PATIENT — Streamlit widget    */
+/* overrides (scoped)            */
+/* ============================= */
+
+/* Style file uploader inside patient view */
+.patient-view [data-testid="stFileUploader"] {
+    border: 1.5px dashed rgba(255,255,255,0.2) !important;
+    border-radius: 14px !important;
+    padding: 24px !important;
+    background: transparent !important;
+}
+
+.patient-view [data-testid="stFileUploader"]:hover {
+    border-color: var(--tessan-coral) !important;
+    background: rgba(232,113,74,0.05) !important;
+}
+
+.patient-view [data-testid="stFileUploader"] label,
+.patient-view [data-testid="stFileUploader"] span,
+.patient-view [data-testid="stFileUploader"] small,
+.patient-view [data-testid="stFileUploader"] p {
+    color: rgba(255,255,255,0.6) !important;
+}
+
+/* Buttons inside patient view */
+.patient-view .stButton > button {
+    width: 100% !important;
+    padding: 14px !important;
+    background: var(--tessan-coral) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    color: white !important;
+    font-weight: 500 !important;
+    font-family: var(--font) !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+}
+
+.patient-view .stButton > button:hover {
+    background: #d45e37 !important;
+}
+
+/* Or divider */
+.or-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: rgba(255,255,255,0.25);
+    font-size: 12px;
+    margin: 20px 0;
+}
+
+.or-divider::before,
+.or-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.12);
+}
+
+/* Waveform / Mel containers */
+.viz-section-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+    margin-top: 16px;
+}
+
+.viz-container {
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+/* Fix matplotlib white background inside dark card */
+.patient-view .stPlotlyChart,
+.patient-view [data-testid="stImage"] {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Success message styling */
+.patient-view .stAlert {
+    border-radius: 10px !important;
+}
+
+/* ============================= */
+/* DOCTOR UI                     */
+/* ============================= */
+.doctor-wrap {
+    background: #f8f8f8;
+    min-height: calc(100vh - 48px);
+    font-family: var(--font);
+}
+
+.doc-header {
+    background: var(--tessan-navy);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.doc-logo {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+}
+
+.doc-logo span {
+    color: var(--tessan-coral);
+}
+
+.doc-tabs {
+    display: flex;
+    gap: 2px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 3px;
+}
+
+.doc-tab {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.5);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.doc-tab.active {
+    background: white;
+    color: var(--tessan-navy);
+}
+
+.doc-user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.doc-avatar {
+    width: 30px;
+    height: 30px;
+    background: var(--tessan-coral);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.doc-name {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+}
+
+.doc-content {
+    padding: 20px 24px;
+}
+
+/* ============================= */
+/* CARDS                         */
+/* ============================= */
+.doc-card,
+.patient-audio-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+}
+
+.doc-card-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+}
+
+/* Analysis grid */
+.analysis-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+/* ============================= */
+/* PATIENT ROW (doctor view)     */
+/* ============================= */
+.patient-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.patient-avatar-doc {
+    width: 40px;
+    height: 40px;
+    background: #e8f0fe;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 13px;
+    color: #185FA5;
+}
+
+.patient-info-doc {
+    flex: 1;
+}
+
+.patient-name-doc {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.patient-meta-doc {
+    font-size: 12px;
+    color: #888;
+}
+
+/* ============================= */
+/* BADGES                        */
+/* ============================= */
+.badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.badge-warn { background: #FEF3C7; color: #92400E; }
+.badge-ok { background: #D1FAE5; color: #065F46; }
+.badge-danger { background: #FEE2E2; color: #991B1B; }
+
+/* ============================= */
+/* PROBA BARS                    */
+/* ============================= */
+.proba-list { display: flex; flex-direction: column; gap: 10px; }
+.proba-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.proba-name { font-size: 13px; font-weight: 500; }
+.proba-pct { font-size: 13px; font-weight: 500; font-family: var(--mono); }
+.proba-bar-bg { height: 6px; background: rgba(0,0,0,0.06); border-radius: 3px; }
+.proba-bar-fill { height: 6px; border-radius: 3px; }
+
+.color-asthma { color: #E24B4A; }  .fill-asthma { background: #E24B4A; }
+.color-copd { color: #EF9F27; }    .fill-copd { background: #EF9F27; }
+.color-pneumo { color: #378ADD; }   .fill-pneumo { background: #378ADD; }
+.color-bronchi { color: #1D9E75; }  .fill-bronchi { background: #1D9E75; }
+.color-sain { color: #888780; }     .fill-sain { background: #888780; }
+
+/* ============================= */
+/* CONFIDENCE                    */
+/* ============================= */
+.confidence-display { text-align: center; padding: 10px 0; }
+.confidence-big {
+    font-size: 42px;
+    font-weight: 300;
+    color: var(--tessan-coral);
+    font-family: var(--mono);
+    line-height: 1;
+}
+.confidence-label { font-size: 12px; color: #888; margin-top: 6px; }
+.confidence-bar-wrap { margin-top: 16px; }
+.confidence-bar-bg { height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden; }
+.confidence-bar-fill { height: 8px; width: 82%; background: var(--tessan-coral); border-radius: 4px; }
+
+/* ============================= */
+/* RECOMMENDATION                */
+/* ============================= */
+.recommendation-card {
+    background: white;
+    border-radius: 12px;
+    border: 2px solid var(--tessan-coral);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+}
+
+.rec-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.rec-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--tessan-coral);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.rec-text { font-size: 13px; color: #333; line-height: 1.6; }
+
+/* ============================= */
+/* DASHBOARD METRICS             */
+/* ============================= */
+.dashboard-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.dash-metric {
+    background: white;
+    border-radius: 10px;
+    border: 1px solid rgba(0,0,0,0.08);
+    padding: 14px 16px;
+}
+
+.dash-metric-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 6px;
+}
+
+.dash-metric-value {
+    font-size: 22px;
+    font-weight: 500;
+    font-family: var(--mono);
+    color: #333;
+}
+
+.dash-metric-sub {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}

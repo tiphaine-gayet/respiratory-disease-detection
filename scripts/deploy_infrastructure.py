@@ -40,6 +40,14 @@ def deploy():
             for cmd in sql_commands:
                 if cmd.strip():
                     cur.execute(cmd)
+
+        # 5. Setup auth layer (APP.USERS)
+        with open('scripts/setup_auth.sql', 'r') as f:
+            auth_content = f.read().replace('{db}', db)
+            auth_commands = auth_content.split(';')
+            for cmd in auth_commands:
+                if cmd.strip():
+                    cur.execute(cmd)
         
         print(f"🚀 Infrastructure Tessan déployée avec succès !")
     finally:

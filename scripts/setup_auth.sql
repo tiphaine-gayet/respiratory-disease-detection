@@ -1,0 +1,27 @@
+-- scripts/setup_auth.sql
+-- Creates the application DB/Schema and authentication table for Patient/Medecin users.
+
+CREATE DATABASE IF NOT EXISTS {db};
+USE DATABASE {db};
+
+CREATE SCHEMA IF NOT EXISTS APP;
+USE SCHEMA APP;
+
+CREATE TABLE IF NOT EXISTS USERS (
+    USER_ID STRING NOT NULL,
+    FULL_NAME STRING NOT NULL,
+    EMAIL STRING NOT NULL,
+    PASSWORD_HASH STRING NOT NULL,
+    PASSWORD_SALT STRING NOT NULL,
+    IS_DOCTOR BOOLEAN NOT NULL DEFAULT FALSE,
+    IS_ACTIVE BOOLEAN NOT NULL DEFAULT TRUE,
+    CREATED_AT TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+    UPDATED_AT TIMESTAMP_NTZ,
+    LAST_LOGIN_AT TIMESTAMP_NTZ,
+
+    CONSTRAINT PK_USERS PRIMARY KEY (USER_ID),
+    CONSTRAINT UQ_USERS_EMAIL UNIQUE (EMAIL)
+);
+
+-- Optional helper index pattern in Snowflake is usually achieved with clustering/queries.
+-- Keep data quality on EMAIL at insert/update time from application code.

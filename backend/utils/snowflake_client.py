@@ -16,9 +16,9 @@ def _get_config() -> dict:
         "account": os.environ["SNOWFLAKE_ACCOUNT"],
         "user": os.environ["SNOWFLAKE_USER"],
         "password": os.environ["SNOWFLAKE_TOKEN"],
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        "database": os.getenv("SNOWFLAKE_DATABASE", "TESSAN_HACKATON"),
-        "schema": os.getenv("SNOWFLAKE_SCHEMA", "ASTHMA_DETECTION"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+        "database": os.getenv("SNOWFLAKE_DATABASE"),
+        "schema": os.getenv("SNOWFLAKE_SCHEMA"),
     }
 
 
@@ -42,6 +42,12 @@ class SnowflakeClient:
     def execute(self, sql: str, params=None):
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
+
+    def query(self, sql: str) -> list:
+        """Exécute un SELECT et retourne toutes les lignes."""
+        with self._conn.cursor() as cur:
+            cur.execute(sql)
+            return cur.fetchall()
 
     def execute_sql_file(self, sql_file: Path) -> None:
         """Execute all statements in a .sql file, ignoring blank lines."""
