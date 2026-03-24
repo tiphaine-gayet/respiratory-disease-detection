@@ -319,20 +319,41 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     # Setup librosa from imported zip
     def _setup_librosa():
         import sys, os, io, zipfile
+
+        # Récupère le répertoire temporaire que Snowflake monte pour les imports
         import_dir = sys._xoptions.get("snowflake_import_directory")
         final_lib_dir = "/tmp/site-packages"
         os.makedirs(final_lib_dir, exist_ok=True)
+
+        # Chemin du zip (doit correspondre EXACTEMENT à celui déclaré dans IMPORTS)
         zip_path = os.path.join(import_dir, "libroza.zip")
 
-        with zipfile.ZipFile(zip_path, 'r') as outer:
-            for name in outer.namelist():
-                if name.endswith(".whl"):
-                    whl_bytes = outer.read(name)
-                    with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
-                        whl.extractall(final_lib_dir)
+        try:
+            # Ouvre le zip importé depuis le stage
+            with zipfile.ZipFile(zip_path, 'r') as outer:
+                for name in outer.namelist():
+                    # Chaque .whl à l’intérieur est un package Python
+                    if name.endswith(".whl"):
+                        whl_bytes = outer.read(name)
+                        try:
+                            with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
+                                whl.extractall(final_lib_dir)
+                        except FileExistsError:
+                            # Si un dossier existe déjà (e.g. librosa/core), on ignore
+                            pass
+        except FileNotFoundError:
+            return f"❌ Zip non trouvé"
+
+        # Ajoute /tmp/site-packages dans sys.path si absent
         if final_lib_dir not in sys.path:
             sys.path.insert(0, final_lib_dir)
-    
+
+        # Teste l'import effectif de librosa
+        try:
+            import librosa
+            return "✅ Librosa importée — version: " + librosa.__version__
+        except Exception as e:
+            return f"❌ Erreur import librosa: {e}"
     _setup_librosa()
     import librosa
     
