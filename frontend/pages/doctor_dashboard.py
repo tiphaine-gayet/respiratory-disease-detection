@@ -38,6 +38,17 @@ _ACTION_LABELS = {
     "URGENCE":   "Urgence",
 }
 
+# Dedicated map color for the "all diseases" view (distinct from class colors).
+_ALL_DISEASES_RGB = (12, 75, 67)
+
+# Color scale for diversity in the all-diseases view: 1 -> 4 diseases.
+_DIVERSITY_RGB_BY_COUNT: dict[int, tuple[int, int, int]] = {
+    1: (184, 216, 201),
+    2: (120, 180, 162),
+    3: (61, 129, 116),
+    4: (12, 75, 67),
+}
+
 
 def _dominant(row) -> str:
     """Renvoie la clé de la maladie dominante, ou 'healthy'."""
@@ -59,7 +70,7 @@ def _fetch(date_from: date, date_to: date) -> pd.DataFrame:
 def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.DataFrame:
     """
     Aggrège les pré-diagnostics pour un ScatterplotLayer pydeck.
-    Colonnes : lat, lon, cas, color, radius, tooltip_text, grp_key.
+    Colonnes : lat, lon, cas, nb_maladies, color, radius, line_width, tooltip_text, grp_key.
     """
     if df.empty:
         return pd.DataFrame()
@@ -81,9 +92,8 @@ def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.Dat
 
     # Couleur par ligne (stockée en colonnes entières pour groupby)
     if disease_key == "all":
-        gdf["_r"] = gdf["dominant"].map({k: v["rgb"][0] for k, v in DISEASES.items()})
-        gdf["_g"] = gdf["dominant"].map({k: v["rgb"][1] for k, v in DISEASES.items()})
-        gdf["_b"] = gdf["dominant"].map({k: v["rgb"][2] for k, v in DISEASES.items()})
+        r, g, b = _ALL_DISEASES_RGB
+        gdf["_r"], gdf["_g"], gdf["_b"] = r, g, b
     else:
         r, g, b = DISEASES[disease_key]["rgb"]
         gdf["_r"], gdf["_g"], gdf["_b"] = r, g, b
@@ -115,6 +125,7 @@ def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.Dat
         gdf.groupby(["grp_key", "grp_label", "grp_lat", "grp_lon"])
         .agg(
             cas=("prediction_id", "count"),
+            nb_maladies=("dominant", "nunique"),
             r=("_r", "first"),
             g=("_g", "first"),
             b=("_b", "first"),
@@ -123,14 +134,39 @@ def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.Dat
     )
 
     agg.rename(columns={"grp_lat": "lat", "grp_lon": "lon", "grp_label": "label"}, inplace=True)
-    agg["color"]  = agg[["r", "g", "b"]].apply(
-        lambda x: [int(x.r), int(x.g), int(x.b), 210], axis=1
-    )
-    max_cas        = agg["cas"].max() or 1
-    agg["radius"]  = (4_000 + (agg["cas"] / max_cas) * 42_000).astype(int)
-    agg["tooltip_text"] = agg["label"] + " — " + agg["cas"].astype(str) + " pré-diagnostic(s)"
 
-    return agg[["lat", "lon", "cas", "color", "radius", "tooltip_text", "grp_key"]]
+    if disease_key == "all":
+        # Color encodes diversity level in the all-diseases map.
+        max_div = len(DISEASES)
+        agg["div_bucket"] = agg["nb_maladies"].clip(1, max_div).astype(int)
+        agg["color"] = agg["div_bucket"].map(_DIVERSITY_RGB_BY_COUNT).apply(
+            lambda rgb: [int(rgb[0]), int(rgb[1]), int(rgb[2]), 215]
+        )
+    else:
+        agg["color"] = agg[["r", "g", "b"]].apply(
+            lambda x: [int(x.r), int(x.g), int(x.b), 210], axis=1
+        )
+
+    # Circle size is always based on total case volume in the area.
+    max_cas = agg["cas"].max() or 1
+    agg["radius"] = (4_000 + (agg["cas"] / max_cas) * 42_000).astype(int)
+
+    if disease_key == "all":
+        agg["line_width"] = 1.5
+        agg["tooltip_text"] = (
+            agg["label"]
+            + " — "
+            + agg["cas"].astype(str)
+            + " pré-diagnostic(s)"
+            + " • diversité: "
+            + agg["nb_maladies"].astype(str)
+            + " maladie(s)"
+        )
+    else:
+        agg["line_width"] = 1.2
+        agg["tooltip_text"] = agg["label"] + " — " + agg["cas"].astype(str) + " pré-diagnostic(s)"
+
+    return agg[["lat", "lon", "cas", "nb_maladies", "color", "radius", "line_width", "tooltip_text", "grp_key"]]
 
 
 # ── Rendu de la carte ─────────────────────────────────────────────────────────
@@ -156,7 +192,8 @@ def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_i
             radius_max_pixels=38,
             opacity=0.75,
             stroked=True,
-            get_line_color=[255, 255, 255, 80],
+            get_line_color=[255, 255, 255, 120],
+            get_line_width="line_width",
             line_width_min_pixels=1,
             pickable=True,
         )
@@ -199,6 +236,20 @@ def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_i
         use_container_width=True,
     )
 
+    if disease_key == "all":
+        st.markdown(
+            """
+            <div class="map-legend-wrap" aria-label="Légende diversité">
+                <span class="map-legend-title">Diversité diagnostique</span>
+                <span class="map-legend-item"><i style="background:#B8D8C9;"></i>1 maladie</span>
+                <span class="map-legend-item"><i style="background:#78B4A2;"></i>2 maladies</span>
+                <span class="map-legend-item"><i style="background:#3D8174;"></i>3 maladies</span>
+                <span class="map-legend-item"><i style="background:#0C4B43;"></i>4 maladies</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
 
 # ── Dashboard principal ───────────────────────────────────────────────────────
 
@@ -208,17 +259,27 @@ def render_dashboard() -> None:
 
     st.markdown(_DASHBOARD_CSS, unsafe_allow_html=True)
     st.markdown('<div class="doc-content">', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="doc-hero">
+            <div class="doc-hero-kicker">Espace medecin</div>
+            <div class="doc-hero-title">Doctor Dashboard</div>
+            <div class="doc-hero-sub">Suivi geographique et priorisation des pre-diagnostics respiratoires.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     today            = date.today()
     first_this_month = today.replace(day=1)
     default_from     = (first_this_month - timedelta(days=1)).replace(day=1)
 
     # ── Disposition deux colonnes : carte | filtres ───────────────────────
-    map_col, ctrl_col = st.columns([3, 2], gap="medium")
+    map_col, ctrl_col = st.columns([7, 4], gap="medium")
 
     # Filtres rendus en premier pour obtenir leurs valeurs
     with ctrl_col:
-        st.markdown('<div class="doc-card">', unsafe_allow_html=True)
+        st.markdown('<div class="doc-card doc-filters">', unsafe_allow_html=True)
         st.markdown('<div class="doc-card-title">Filtres &amp; indicateurs</div>', unsafe_allow_html=True)
 
         d1, d2 = st.columns(2)
@@ -416,6 +477,40 @@ def render_dashboard() -> None:
 
 _DASHBOARD_CSS = """
 <style>
+/* ━━ Hero ━━ */
+.doc-hero {
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFAF6 100%);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 16px 18px 14px;
+    margin: 2px 0 14px;
+    box-shadow: var(--shadow);
+}
+
+.doc-hero-kicker {
+    font-family: var(--font-body);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 4px;
+}
+
+.doc-hero-title {
+    font-family: var(--font-title);
+    font-size: 34px;
+    line-height: 1;
+    color: var(--text-main);
+    margin-bottom: 4px;
+}
+
+.doc-hero-sub {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-soft);
+}
+
 /* ━━ KPI 2×2 grid (colonne filtres) ━━ */
 .kpi-grid {
     display: grid;
@@ -466,6 +561,11 @@ _DASHBOARD_CSS = """
     box-shadow: var(--shadow);
 }
 
+.doc-filters {
+    position: sticky;
+    top: 14px;
+}
+
 .doc-card-title {
     font-size: 15px;
     font-weight: 600;
@@ -513,10 +613,24 @@ _DASHBOARD_CSS = """
     color: var(--text-soft) !important;
 }
 
+[data-testid="stRadio"] [role="radiogroup"] {
+    gap: 10px;
+}
+
 /* ━━ Multiselect ━━ */
 [data-testid="stMultiSelect"] * {
     font-family: var(--font-body) !important;
     font-size: 13px !important;
+}
+
+[data-testid="stDateInput"] label,
+[data-testid="stMultiSelect"] label {
+    color: var(--text-soft) !important;
+    font-family: var(--font-body) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 /* ━━ Dataframe ━━ */
@@ -533,6 +647,14 @@ _DASHBOARD_CSS = """
     border-radius: 10px !important;
     border-color: var(--border) !important;
     color: var(--text-main) !important;
+    background: #fff !important;
+}
+
+[data-testid="stDateInput"] [data-baseweb="input"],
+[data-testid="stMultiSelect"] [data-baseweb="select"] {
+    border-color: var(--border) !important;
+    border-radius: 10px !important;
+    background: #fff !important;
 }
 
 /* ━━ Map container breathing room ━━ */
@@ -540,6 +662,39 @@ _DASHBOARD_CSS = """
     border-radius: 14px !important;
     overflow: hidden;
     margin-top: 4px;
+}
+
+/* ━━ Map legend ━━ */
+.map-legend-wrap {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+}
+
+.map-legend-title {
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-right: 2px;
+}
+
+.map-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.map-legend-item i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    display: inline-block;
 }
 
 /* ━━ Predictions table ━━ */
@@ -578,5 +733,24 @@ _DASHBOARD_CSS = """
 .pred-table tbody tr:hover td {
     background: rgba(0,0,0,0.02);
 }
+
+/* ━━ Mobile ━━ */
+@media (max-width: 980px) {
+    .doc-hero-title {
+        font-size: 28px;
+    }
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+    .doc-filters {
+        position: static;
+        top: auto;
+    }
+}
 </style>
 """
+
+
+# Streamlit multipage entrypoint: render this page when selected from the sidebar menu.
+if __name__ == "__main__":
+    render_dashboard()

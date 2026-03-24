@@ -7,27 +7,44 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── State Initialization ──
-if "mode" not in st.session_state:
-    st.session_state.mode = "patient"
+# ── Auth State Initialization ──
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "is_doctor" not in st.session_state:
+    st.session_state.is_doctor = False
+if "user_full_name" not in st.session_state:
+    st.session_state.user_full_name = ""
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+if "user_id" not in st.session_state:
+    st.session_state.user_id = ""
 
 # ── Sidebar Navigation ──
 with st.sidebar:
     st.markdown(
         '<div style="font-family:\'Space Mono\',monospace;font-size:18px;font-weight:700;'
-        'color:white;letter-spacing:0.12em;margin-bottom:24px;">'
+        'color:#0C4B43;letter-spacing:0.12em;margin-bottom:16px;">'
         'TESS<span style="color:#E8714A;">AN</span></div>',
         unsafe_allow_html=True,
     )
-    
-    # Simple Toggle between Patient and Médecin
-    mode_selection = st.radio(
-        "Mode",
-        ["Patient", "Médecin"],
-        index=0 if st.session_state.mode == "patient" else 1,
-        label_visibility="collapsed",
-    )
-    st.session_state.mode = "patient" if mode_selection == "Patient" else "doctor"
+
+    if st.session_state.authenticated:
+        role_text = "Medecin" if st.session_state.is_doctor else "Patient"
+        st.caption(f"Connecte: {st.session_state.user_full_name} ({role_text})")
+        st.caption(st.session_state.user_email)
+        if st.button("Se deconnecter", use_container_width=True):
+            for key in [
+                "authenticated",
+                "is_doctor",
+                "user_full_name",
+                "user_email",
+                "user_id",
+                "auth_page",
+                "register_role",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
     # Sidebar styling to match the dark navy Tessan brand
     st.markdown(
@@ -60,11 +77,15 @@ with st.sidebar:
     unsafe_allow_html=True,
     )
 
-# ── Router in app.py ──
-if st.session_state.mode == "patient":
-    from pages.audio_diagnostic import render_diagnostic
-    render_diagnostic(is_doctor=False) # Normal view
+# ── Auth gate + Router ──
+if not st.session_state.authenticated:
+    from pages.auth import render_auth_page
+    render_auth_page()
+    st.stop()
 
+if st.session_state.is_doctor:
+    from pages.doctor_dashboard import render_dashboard
+    render_dashboard()
 else:
     from pages.audio_diagnostic import render_diagnostic
-    render_diagnostic(is_doctor=True)
+    render_diagnostic(is_doctor=False)
