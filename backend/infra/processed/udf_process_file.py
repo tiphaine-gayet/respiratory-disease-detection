@@ -304,59 +304,15 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
     PACKAGES = ('scipy', 'numpy', 'pandas')
-    IMPORTS = ('@"M2_ISD_EQUIPE_1_DB"."PUBLIC"."STG_LIBRARIES"/libs/libroza.zip')
     HANDLER = 'process_file_udf_handler'
     AS $$
-    import sys
-    import os
     import io
-    import zipfile
     import numpy as np
     import warnings
-    from scipy.signal import butter, filtfilt
+    from scipy.signal import butter, filtfilt, resample_poly
+    from scipy.io import wavfile
     import pandas as pd
-    
-    # Setup librosa from imported zip
-    def _setup_librosa():
-        import sys, os, io, zipfile
-
-        # Récupère le répertoire temporaire que Snowflake monte pour les imports
-        import_dir = sys._xoptions.get("snowflake_import_directory")
-        final_lib_dir = "/tmp/site-packages"
-        os.makedirs(final_lib_dir, exist_ok=True)
-
-        # Chemin du zip (doit correspondre EXACTEMENT à celui déclaré dans IMPORTS)
-        zip_path = os.path.join(import_dir, "libroza.zip")
-
-        try:
-            # Ouvre le zip importé depuis le stage
-            with zipfile.ZipFile(zip_path, 'r') as outer:
-                for name in outer.namelist():
-                    # Chaque .whl à l’intérieur est un package Python
-                    if name.endswith(".whl"):
-                        whl_bytes = outer.read(name)
-                        try:
-                            with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
-                                whl.extractall(final_lib_dir)
-                        except FileExistsError:
-                            # Si un dossier existe déjà (e.g. librosa/core), on ignore
-                            pass
-        except FileNotFoundError:
-            return f"❌ Zip non trouvé"
-
-        # Ajoute /tmp/site-packages dans sys.path si absent
-        if final_lib_dir not in sys.path:
-            sys.path.insert(0, final_lib_dir)
-
-        # Teste l'import effectif de librosa
-        try:
-            import librosa
-            return "✅ Librosa importée — version: " + librosa.__version__
-        except Exception as e:
-            return f"❌ Erreur import librosa"
-            
-    _setup_librosa()
-    import librosa
+    from snowflake.snowpark.files import SnowflakeFile
     
     warnings.filterwarnings('ignore')
     
@@ -378,11 +334,45 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
         return filtfilt(b, a, y)
     
     def trim_silence(y, sr, top_db=30):
-        _, indices = librosa.effects.trim(y, top_db=top_db)
-        y_trimmed = y[indices[0]:indices[1]]
-        leading_s = indices[0] / sr
-        trailing_s = (len(y) - indices[1]) / sr
+        if len(y) == 0:
+            return y, 0.0, 0.0
+        ref = float(np.max(np.abs(y)))
+        if ref <= 0:
+            return y, 0.0, 0.0
+
+        threshold = ref * (10 ** (-top_db / 20.0))
+        idx = np.where(np.abs(y) >= threshold)[0]
+        if idx.size == 0:
+            return y, 0.0, 0.0
+
+        start = int(idx[0])
+        end = int(idx[-1]) + 1
+        y_trimmed = y[start:end]
+        leading_s = start / sr
+        trailing_s = (len(y) - end) / sr
         return y_trimmed, leading_s, trailing_s
+
+    def load_audio_from_stage(file_path):
+        with SnowflakeFile.open(file_path, 'rb') as f:
+            audio_bytes = f.read()
+
+        sr, y = wavfile.read(io.BytesIO(audio_bytes))
+
+        # Convert multi-channel to mono
+        if len(y.shape) > 1:
+            y = np.mean(y.astype(np.float32), axis=1)
+
+        # Normalize PCM to float32 [-1, 1]
+        if y.dtype == np.int16:
+            y = y.astype(np.float32) / 32768.0
+        elif y.dtype == np.int32:
+            y = y.astype(np.float32) / 2147483648.0
+        elif y.dtype == np.uint8:
+            y = (y.astype(np.float32) - 128.0) / 128.0
+        else:
+            y = y.astype(np.float32)
+
+        return y, int(sr)
     
     def pad_or_crop(y, sr, target_s=6):
         target = int(target_s * sr)
@@ -400,7 +390,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
         original_duration = len(y_raw) / sr_raw
         
         if sr_raw != 22050:
-            y = librosa.resample(y_raw, orig_sr=sr_raw, target_sr=22050)
+            y = resample_poly(y_raw, 22050, sr_raw).astype(np.float32)
             sr = 22050
         else:
             y, sr = y_raw.copy(), sr_raw
@@ -447,7 +437,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
                 stage_name = stage_name + '/'
             file_path = stage_name + file_name
             
-            y, sr = librosa.load(file_path, sr=None)
+            y, sr = load_audio_from_stage(file_path)
             y_proc, sr_proc, meta = process_file(y, sr, file_name, class_name)
             
             return {{
