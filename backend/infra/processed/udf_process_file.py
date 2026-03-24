@@ -73,6 +73,8 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
+METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA"
+
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 CONFIG = {
@@ -211,12 +213,35 @@ def process_file(y_raw, sr_raw, file_name, class_name):
     return y, sr, meta
 
 
+def insert_metadata_to_table(session, meta: dict, table_name: str = METADATA_TABLE) -> bool:
+    """Insert one metadata row into Snowflake table."""
+    df = pd.DataFrame([{
+        'FILE_NAME': meta.get("FILE_NAME"),
+        'CLASS': meta.get("CLASS"),
+        'ACTION': meta.get("ACTION"),
+        'ORIGINAL_DURATION_S': meta.get("ORIGINAL_DURATION_S"),
+        'STRIPPED_DURATION_S': meta.get("STRIPPED_DURATION_S"),
+        'FINAL_DURATION_S': meta.get("FINAL_DURATION_S"),
+        'LEADING_SILENCE_S': meta.get("LEADING_SILENCE_S"),
+        'TRAILING_SILENCE_S': meta.get("TRAILING_SILENCE_S"),
+        'SAMPLE_RATE': meta.get("SAMPLE_RATE"),
+        'N_SAMPLES': meta.get("N_SAMPLES"),
+        'AMPLITUDE_MAX': meta.get("AMPLITUDE_MAX"),
+        'RMS': meta.get("RMS"),
+    }])
+    session.create_dataframe(df).write.mode("append").save_as_table(
+        table_name,
+        create_temp_table=False
+    )
+    return True
+
+
 # ── Snowflake UDF ─────────────────────────────────────────────────────────────
 def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
     """
     Snowflake UDF to preprocess a single audio file.
     
-    Also inserts metadata into M2_ISD_EQUIPE_1_DB.PROCESSED.RESPIRATORY_SOUNDS_METADATA.
+    Also inserts metadata into M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA.
     
     Args:
         file_name: Audio file name (e.g., 'patient_001.wav')
@@ -239,29 +264,13 @@ def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
         y_proc, sr_proc, meta = process_file(y, sr, file_name, class_name)
         
         # Insert metadata into table
+        db_insert_status = "FAILED"
         try:
             if get_active_session is not None:
                 session = get_active_session()
-                # Create DataFrame for safer insertion
-                df = pd.DataFrame([{
-                    'FILE_NAME': meta.get("FILE_NAME"),
-                    'CLASS': meta.get("CLASS"),
-                    'ACTION': meta.get("ACTION"),
-                    'ORIGINAL_DURATION_S': meta.get("ORIGINAL_DURATION_S"),
-                    'STRIPPED_DURATION_S': meta.get("STRIPPED_DURATION_S"),
-                    'FINAL_DURATION_S': meta.get("FINAL_DURATION_S"),
-                    'LEADING_SILENCE_S': meta.get("LEADING_SILENCE_S"),
-                    'TRAILING_SILENCE_S': meta.get("TRAILING_SILENCE_S"),
-                    'SAMPLE_RATE': meta.get("SAMPLE_RATE"),
-                    'N_SAMPLES': meta.get("N_SAMPLES"),
-                    'AMPLITUDE_MAX': meta.get("AMPLITUDE_MAX"),
-                    'RMS': meta.get("RMS"),
-                }])
-                session.create_dataframe(df).write.mode("append").save_as_table(
-                    "M2_ISD_EQUIPE_1_DB.TEST.USER_RESPIRATORY_SOUNDS_METADATA",
-                    create_temp_table=False
-                )
-        except Exception as insert_error:
+                insert_metadata_to_table(session, meta, METADATA_TABLE)
+                db_insert_status = "SUCCESS"
+        except Exception:
             # Log insert error but don't fail the UDF
             pass
         
@@ -272,7 +281,7 @@ def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
             "STATUS": "SUCCESS" if y_proc is not None else "REJECTED",
             "ACTION": meta.get("ACTION"),
             "METADATA": meta,
-            "DB_INSERT": "SUCCESS" if y_proc is not None else "SKIPPED",
+            "DB_INSERT": db_insert_status if y_proc is not None else "SKIPPED",
         }
         
     except Exception as e:
@@ -297,6 +306,26 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
         session: Snowflake session
         udf_name: Name for the UDF in Snowflake
     """
+    # Ensure metadata table exists
+    session.sql(f"""
+        CREATE TABLE IF NOT EXISTS {METADATA_TABLE} (
+            FILE_NAME VARCHAR,
+            CLASS VARCHAR,
+            ACTION VARCHAR,
+            ORIGINAL_DURATION_S FLOAT,
+            STRIPPED_DURATION_S FLOAT,
+            FINAL_DURATION_S FLOAT,
+            LEADING_SILENCE_S FLOAT,
+            TRAILING_SILENCE_S FLOAT,
+            SAMPLE_RATE INT,
+            N_SAMPLES INT,
+            AMPLITUDE_MAX FLOAT,
+            RMS FLOAT,
+            CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+        )
+    """).collect()
+    print(f"✓ Metadata table created/verified: {METADATA_TABLE}")
+
     # Register UDF via SQL with inline Python code
     udf_sql = textwrap.dedent(f"""
     CREATE OR REPLACE FUNCTION {udf_name}(file_name VARCHAR, stage_name VARCHAR, class_name VARCHAR)
@@ -312,6 +341,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     from scipy.signal import butter, filtfilt, resample_poly
     from scipy.io import wavfile
     import pandas as pd
+    from snowflake.snowpark.context import get_active_session
     from snowflake.snowpark.files import SnowflakeFile
     
     warnings.filterwarnings('ignore')
@@ -378,6 +408,31 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
             y = y.astype(np.float32)
 
         return y, int(sr)
+
+    def insert_metadata_to_table(meta):
+        try:
+            session = get_active_session()
+            df = pd.DataFrame([{{
+                'FILE_NAME': meta.get("FILE_NAME"),
+                'CLASS': meta.get("CLASS"),
+                'ACTION': meta.get("ACTION"),
+                'ORIGINAL_DURATION_S': meta.get("ORIGINAL_DURATION_S"),
+                'STRIPPED_DURATION_S': meta.get("STRIPPED_DURATION_S"),
+                'FINAL_DURATION_S': meta.get("FINAL_DURATION_S"),
+                'LEADING_SILENCE_S': meta.get("LEADING_SILENCE_S"),
+                'TRAILING_SILENCE_S': meta.get("TRAILING_SILENCE_S"),
+                'SAMPLE_RATE': meta.get("SAMPLE_RATE"),
+                'N_SAMPLES': meta.get("N_SAMPLES"),
+                'AMPLITUDE_MAX': meta.get("AMPLITUDE_MAX"),
+                'RMS': meta.get("RMS"),
+            }}])
+            session.create_dataframe(df).write.mode("append").save_as_table(
+                "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA",
+                create_temp_table=False
+            )
+            return "SUCCESS"
+        except Exception:
+            return "FAILED"
     
     def pad_or_crop(y, sr, target_s=6):
         target = int(target_s * sr)
@@ -444,6 +499,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
             
             y, sr = load_audio_from_stage(file_path)
             y_proc, sr_proc, meta = process_file(y, sr, file_name, class_name)
+            db_insert = insert_metadata_to_table(meta)
             
             return {{
                 "FILE_NAME": file_name,
@@ -452,6 +508,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
                 "STATUS": "SUCCESS" if y_proc is not None else "REJECTED",
                 "ACTION": meta.get("ACTION"),
                 "METADATA": meta,
+                "DB_INSERT": db_insert if y_proc is not None else "SKIPPED",
             }}
         except Exception as e:
             return {{
