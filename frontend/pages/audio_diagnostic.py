@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
+from backend.router.predictions import load_pharmacies_for_select
 
 # ── Path to reference audio files ──
 REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
@@ -74,6 +75,11 @@ def _load_ref_audio(audio_file):
     return audio, sr_
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_pharmacies_options():
+    return load_pharmacies_for_select()
+
+
 def render_diagnostic(is_doctor=False):
     st.markdown(_PATIENT_CSS, unsafe_allow_html=True)
 
@@ -87,6 +93,30 @@ def render_diagnostic(is_doctor=False):
         """,
         unsafe_allow_html=True,
     )
+
+    # ── Pharmacy selection (used to attach pharmacy_id to the test context) ──
+    pharmacies_df = _load_pharmacies_options()
+    pharmacy_options = [""]
+    pharmacy_labels = {"": "Sélectionner votre pharmacie"}
+    if not pharmacies_df.empty:
+        for _, row in pharmacies_df.iterrows():
+            pid = row["pharmacie_id"]
+            pharmacy_options.append(pid)
+            pharmacy_labels[pid] = row["label"]
+
+    if "selected_pharmacy_id" not in st.session_state:
+        st.session_state["selected_pharmacy_id"] = ""
+
+    st.selectbox(
+        "Pharmacie du test",
+        options=pharmacy_options,
+        format_func=lambda pid: pharmacy_labels.get(pid, pid),
+        key="selected_pharmacy_id",
+        help="Sélectionnez la pharmacie où le test a été effectué.",
+    )
+    
+    # DEBUG: Print pharmacy ID
+    print(f"🔍 Pharmacy ID selected: {st.session_state.get('selected_pharmacy_id', 'NONE')}")
 
     st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
 
@@ -163,6 +193,12 @@ def render_diagnostic(is_doctor=False):
 
         if not st.session_state.get("analysis_sent", False):
             if st.button("Envoyer →", use_container_width=True, key="send_analysis"):
+                if not st.session_state.get("selected_pharmacy_id"):
+                    st.warning("Veuillez sélectionner une pharmacie avant l'envoi.")
+                    st.stop()
+
+                # Keep selected pharmacy id available for downstream persistence.
+                st.session_state["analysis_pharmacie_id"] = st.session_state["selected_pharmacy_id"]
                 st.session_state["analysis_sent"] = True
                 st.rerun()
         else:
@@ -602,8 +638,8 @@ footer { display: none !important; }
 .stButton > button {
     width: 100% !important;
     padding: 14px 24px !important;
-    background: var(--yellow) !important;
-    border: 1px solid transparent !important;
+    background: white !important;
+    border: 1px solid var(--border) !important;
     border-radius: 10px !important;
     color: var(--green) !important;
     font-family: var(--font-body) !important;
@@ -616,9 +652,9 @@ footer { display: none !important; }
 .stButton > button:hover,
 .stButton > button:focus,
 .stButton > button:active {
-    background: var(--yellow-dark) !important;
-    color: var(--green) !important;
-    border-color: transparent !important;
+    background: var(--green) !important;
+    color: white !important;
+    border-color: var(--green) !important;
     box-shadow: none !important;
     outline: none !important;
 }

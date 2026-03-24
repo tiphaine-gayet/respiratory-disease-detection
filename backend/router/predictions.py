@@ -103,3 +103,35 @@ def load_predictions(date_from: date, date_to: date) -> pd.DataFrame:
         "pharmacie_nom", "commune", "code_postal", "code_departement",
         "loc_lat", "loc_long",
     ])
+
+
+def load_pharmacies_for_select() -> pd.DataFrame:
+    """Return pharmacy options for UI selectbox: id + display label."""
+    sql = f"""
+        SELECT
+            osm_id AS pharmacie_id,
+            nom AS pharmacie_nom,
+            commune,
+            code_postal
+        FROM {_PHARMACIES_TABLE}
+        WHERE osm_id IS NOT NULL
+          AND nom IS NOT NULL
+        ORDER BY nom ASC, commune ASC
+    """
+
+    with SnowflakeClient() as client:
+        rows = client.query(sql)
+
+    if not rows:
+        return pd.DataFrame(columns=["pharmacie_id", "label"])
+
+    df = pd.DataFrame(rows, columns=["pharmacie_id", "pharmacie_nom", "commune", "code_postal"])
+    df["pharmacie_id"] = df["pharmacie_id"].astype(str)
+
+    def _label(row: pd.Series) -> str:
+        commune = row["commune"] if pd.notna(row["commune"]) else "Commune inconnue"
+        cp = str(row["code_postal"]) if pd.notna(row["code_postal"]) else "--"
+        return f"{row['pharmacie_nom']} ({cp}, {commune})"
+
+    df["label"] = df.apply(_label, axis=1)
+    return df[["pharmacie_id", "label"]].drop_duplicates(subset=["pharmacie_id"]).reset_index(drop=True)
