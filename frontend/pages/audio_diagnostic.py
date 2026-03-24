@@ -115,6 +115,9 @@ def render_diagnostic(is_doctor=False):
         help="Sélectionnez la pharmacie où le test a été effectué.",
     )
     
+    # DEBUG: Print pharmacy ID
+    print(f"🔍 Pharmacy ID selected: {st.session_state.get('selected_pharmacy_id', 'NONE')}")
+
     st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
 
     st.markdown(

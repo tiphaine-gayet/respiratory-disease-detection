@@ -24,6 +24,8 @@ from datetime import datetime
 import re
 
 import numpy as np
+from datetime import date
+
 import pandas as pd
 
 from backend.utils.snowflake_client import SnowflakeClient
@@ -37,6 +39,9 @@ _PREDICTIONS_TABLE   = f"{_DB}.{_SCHEMA}.PREDICTIONS"
 _PHARMACIES_TABLE    = f"{_DB}.{_SCHEMA}.PHARMACIES_FRANCE"
 _INGESTED_STAGE      = f"{_DB}.{_INGESTED_SCHEMA}.STG_INGESTED_SOUNDS"
 _INGESTED_METADATA_TABLE = f"{_DB}.{_INGESTED_SCHEMA}.INGESTED_SOUNDS_METADATA"
+
+_PREDICTIONS_TABLE   = f"{_DB}.{_SCHEMA}.PREDICTIONS"
+_PHARMACIES_TABLE    = f"{_DB}.{_SCHEMA}.PHARMACIES_FRANCE"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
