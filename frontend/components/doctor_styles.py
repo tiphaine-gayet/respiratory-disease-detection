@@ -2,19 +2,34 @@ import streamlit as st
 
 DOCTOR_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-    /* ── Tessan brand tokens ── */
-    --navy:       #1A2B4A;
-    --navy-light: #243656;
-    --coral:      #E8714A;
-    --coral-dark: #D4602E;
-    --coral-glow: rgba(232, 113, 74, 0.12);
+    /* ── Shared app.py / patient tokens ── */
+    --bg:           #F6F4EE;
+    --bg-soft:      #F1EEE6;
+    --card:         #FFFFFF;
+    --green:        #0C4B43;
+    --green-2:      #0F5A50;
+    --text-main:    #0C4B43;
+    --text-soft:    #42675F;
+    --text-muted:   #6F8C85;
+    --border:       #D7E3DC;
+    --yellow:       #E7E56A;
+    --shadow:       0 8px 24px rgba(12, 75, 67, 0.05);
+
+    /* ── Legacy aliases to keep existing component classes working ── */
+    --navy:       var(--green);
+    --navy-light: var(--green-2);
+    --coral:      #D95C4F;
+    --coral-dark: #B84D42;
+    --coral-glow: rgba(217, 92, 79, 0.12);
     --white:      #FFFFFF;
-    --off-white:  #F7F8FA;
-    --slate:      #64748B;
-    --font:       'Poppins', sans-serif;
+    --off-white:  var(--bg);
+    --slate:      var(--text-muted);
+
+    --font:       'Inter', sans-serif;
+    --font-title: 'Cormorant Garamond', serif;
     --mono:       'JetBrains Mono', monospace;
 
     /* ── Disease color scale ── */
@@ -31,62 +46,78 @@ DOCTOR_CSS = """
 [data-testid="stMain"],
 .main, section.main, section.main > div,
 .block-container {
-    background-color: var(--off-white) !important;
+    background-color: var(--bg) !important;
 }
 .block-container {
-    padding: 0 !important;
-    max-width: 100% !important;
+    padding: 24px 20px 28px !important;
+    max-width: 1320px !important;
+}
+
+/* ── Sidebar alignment with app.py ── */
+[data-testid="stSidebar"] {
+    background-color: var(--bg) !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] .stRadio label p {
+    color: var(--text-main) !important;
+    font-family: var(--font) !important;
+    font-weight: 500 !important;
+}
+[data-testid="stSidebar"] button,
+[data-testid="collapsedControl"] button {
+    color: var(--text-main) !important;
 }
 header[data-testid="stHeader"] { display: none !important; }
 footer { display: none !important; }
 
 /* ── Doctor header bar ── */
 .doc-header {
-    background: var(--navy);
-    padding: 14px 24px;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFAF6 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 14px 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-radius: 0;
-    margin-bottom: 0;
+    border-radius: 16px;
+    margin-bottom: 16px;
 }
 .doc-logo {
-    font-family: var(--font);
+    font-family: var(--font-title);
     font-size: 16px;
-    font-weight: 700;
-    color: white;
-    letter-spacing: 0.14em;
+    font-weight: 600;
+    color: var(--text-main);
+    letter-spacing: 0.08em;
 }
-.doc-logo span { color: var(--coral); }
+.doc-logo span { color: #D95C4F; }
 .doc-user-info { display: flex; align-items: center; gap: 8px; }
 .doc-avatar {
     width: 30px; height: 30px;
-    background: var(--coral);
+    background: var(--green);
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     color: white; font-size: 11px; font-weight: 600;
     font-family: var(--font);
 }
-.doc-name { font-size: 12px; color: rgba(255,255,255,0.7); font-family: var(--font); }
+.doc-name { font-size: 12px; color: var(--text-soft); font-family: var(--font); }
 
 /* ── Content area ── */
-.doc-content { padding: 20px 24px; }
+.doc-content { padding: 0; }
 
 /* ── Cards ── */
 .doc-card {
-    background: white;
-    border-radius: 14px;
-    border: 1px solid rgba(0,0,0,0.06);
-    padding: 16px 18px;
+    background: var(--card);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    padding: 18px 20px;
     margin-bottom: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: var(--shadow);
 }
 .doc-card-title {
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--slate);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+    letter-spacing: 0.02em;
     margin-bottom: 14px;
     font-family: var(--font);
 }

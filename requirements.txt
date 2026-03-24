@@ -17,6 +17,7 @@ llvmlite==0.42.0
 
 # Visualization
 matplotlib==3.8.4
+pydeck>=0.8.0b4
 
 # Streamlit
 streamlit==1.32.2

@@ -7,64 +7,131 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── State Initialization ──
-if "mode" not in st.session_state:
-    st.session_state.mode = "patient"
+# ── Custom CSS to hide default sidebar ──
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# ── Sidebar Navigation ──
-with st.sidebar:
+# ── Auth State Initialization ──
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "is_doctor" not in st.session_state:
+    st.session_state.is_doctor = False
+if "user_full_name" not in st.session_state:
+    st.session_state.user_full_name = ""
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+if "user_id" not in st.session_state:
+    st.session_state.user_id = ""
+if "current_page" not in st.session_state:
+    st.session_state.current_page = None
+if "selected_pharmacy_id" not in st.session_state:
+    st.session_state.selected_pharmacy_id = ""
+
+# ── Horizontal Header Navigation ──
+header_col1, header_col2, header_col3 = st.columns([1, 2, 1])
+
+with header_col1:
     st.markdown(
-        '<div style="font-family:\'Space Mono\',monospace;font-size:18px;font-weight:700;'
-        'color:white;letter-spacing:0.12em;margin-bottom:24px;">'
+        '<div style="font-family:\'Space Mono\',monospace;font-size:20px;font-weight:700;'
+        'color:#0C4B43;letter-spacing:0.12em;">'
         'TESS<span style="color:#E8714A;">AN</span></div>',
         unsafe_allow_html=True,
     )
-    
-    # Simple Toggle between Patient and Médecin
-    mode_selection = st.radio(
-        "Mode",
-        ["Patient", "Médecin"],
-        index=0 if st.session_state.mode == "patient" else 1,
-        label_visibility="collapsed",
-    )
-    st.session_state.mode = "patient" if mode_selection == "Patient" else "doctor"
 
-    # Sidebar styling to match the dark navy Tessan brand
-    st.markdown(
+with header_col2:
+    if st.session_state.authenticated:
+        role_text = "Médecin" if st.session_state.is_doctor else "Patient"
+        
+        # Display user info and doctor button
+        nav_col1, nav_col2 = st.columns([2, 1])
+        with nav_col1:
+            st.caption(f"**{st.session_state.user_full_name}** ({role_text})")
+        with nav_col2:
+            if st.session_state.is_doctor:
+                if st.button("🎤 Diagnostic audio", key="nav_diagnostic"):
+                    st.session_state.current_page = "audio_diagnostic"
+
+with header_col3:
+    if st.session_state.authenticated:
+        if st.button("🚪 Déconnexion"):
+            for key in [
+                "authenticated",
+                "is_doctor",
+                "user_full_name",
+                "user_email",
+                "user_id",
+                "auth_page",
+                "register_role",
+                "current_page",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+
+st.divider()
+
+# ── Header styling ──
+st.markdown(
     """
     <style>
-    /* 1. Background and Text color for the Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #F6F4EE !important; /* var(--bg) from patient_main */
-        border-right: 1px solid #D7E3DC !important; /* var(--border) */
+    /* Header and main container styling */
+    [data-testid="stAppViewContainer"] {
+        background-color: #F6F4EE !important;
     }
-
-    /* 2. Style the radio buttons/text in the sidebar to match */
-    [data-testid="stSidebar"] .stRadio label p {
-        color: #0C4B43 !important; /* var(--text-main) */
-        font-family: 'Inter', sans-serif !important;
+    
+    /* Style all buttons - white background with green text */
+    button {
+        background-color: white !important;
+        color: #0C4B43 !important;
+        border: 1px solid #D7E3DC !important;
         font-weight: 500 !important;
+        padding: 8px 16px !important;
     }
-
-    /* 3. Style the sidebar toggle button (the 'x' and the '>' to open) */
-    [data-testid="stSidebar"] button, [data-testid="collapsedControl"] button {
+    
+    button:hover {
+        background-color: #0C4B43 !important;
+        color: white !important;
+        border-color: #0C4B43 !important;
+    }
+    
+    button:focus {
+        background-color: white !important;
         color: #0C4B43 !important;
     }
     
-    /* 4. Ensure the main container doesn't leave a gap when sidebar is closed */
-    [data-testid="stAppViewContainer"] {
-        background-color: #F6F4EE !important;
+    button p, button span, button * {
+        color: #0C4B43 !important;
+    }
+    
+    button:hover p, button:hover span, button:hover * {
+        color: white !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
-    )
+)
 
-# ── Router in app.py ──
-if st.session_state.mode == "patient":
+# ── Auth gate + Router ──
+if not st.session_state.authenticated:
+    from pages.auth import render_auth_page
+    render_auth_page()
+    st.stop()
+
+# Determine which page to show
+if st.session_state.current_page == "audio_diagnostic":
     from pages.audio_diagnostic import render_diagnostic
-    render_diagnostic(is_doctor=False) # Normal view
-
+    render_diagnostic(is_doctor=False)
+elif st.session_state.is_doctor:
+    from pages.doctor_dashboard import render_dashboard
+    render_dashboard()
 else:
     from pages.audio_diagnostic import render_diagnostic
-    render_diagnostic(is_doctor=True)
+    render_diagnostic(is_doctor=False)
