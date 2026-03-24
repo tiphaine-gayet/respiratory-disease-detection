@@ -73,7 +73,7 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
-METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA"
+METADATA_TABLE = "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_PROCESSED_METADATA"
 
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ def process_file_udf(file_name: str, stage_name: str, class_name: str) -> dict:
     """
     Snowflake UDF to preprocess a single audio file.
     
-    Also inserts metadata into M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA.
+    Also inserts metadata into M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_PROCESSED_METADATA.
     
     Args:
         file_name: Audio file name (e.g., 'patient_001.wav')
@@ -427,7 +427,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
                 'RMS': meta.get("RMS"),
             }}])
             session.create_dataframe(df).write.mode("append").save_as_table(
-                "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_METADATA",
+                "M2_ISD_EQUIPE_1_DB.INGESTED.INGESTED_SOUNDS_PROCESSED_METADATA",
                 create_temp_table=False
             )
             return "SUCCESS"
