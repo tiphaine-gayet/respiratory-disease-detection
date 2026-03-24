@@ -1,14 +1,17 @@
 import streamlit as st
 
-st.set_page_config(page_title="TESSAN", layout="wide")
+# Force the centered layout for a more professional medical portal look
+st.set_page_config(
+    page_title="TESSAN", 
+    layout="wide", 
+    initial_sidebar_state="collapsed"
+)
 
-# ── State ──
+# ── State Initialization ──
 if "mode" not in st.session_state:
     st.session_state.mode = "patient"
-if "doc_tab" not in st.session_state:
-    st.session_state.doc_tab = "analyse"
 
-# ── Sidebar ──
+# ── Sidebar Navigation ──
 with st.sidebar:
     st.markdown(
         '<div style="font-family:\'Space Mono\',monospace;font-size:18px;font-weight:700;'
@@ -16,64 +19,52 @@ with st.sidebar:
         'TESS<span style="color:#E8714A;">AN</span></div>',
         unsafe_allow_html=True,
     )
-    mode = st.radio(
+    
+    # Simple Toggle between Patient and Médecin
+    mode_selection = st.radio(
         "Mode",
         ["Patient", "Médecin"],
         index=0 if st.session_state.mode == "patient" else 1,
         label_visibility="collapsed",
     )
-    st.session_state.mode = "patient" if mode == "Patient" else "doctor"
+    st.session_state.mode = "patient" if mode_selection == "Patient" else "doctor"
 
-    if st.session_state.mode == "doctor":
-        st.markdown("---")
-        st.markdown(
-            '<p style="color:rgba(255,255,255,0.45);font-size:10px;'
-            'text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">'
-            'Espace Médecin</p>',
-            unsafe_allow_html=True,
-        )
-        tab = st.radio(
-            "Section",
-            ["Analyse", "Comparer", "Dashboard"],
-            index=["analyse", "comparer", "dashboard"].index(st.session_state.doc_tab),
-            label_visibility="collapsed",
-        )
-        st.session_state.doc_tab = tab.lower()
-
-    # Sidebar styling
+    # Sidebar styling to match the dark navy Tessan brand
     st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
-        [data-testid="stSidebar"] {
-            background: #232f42 !important;
-            min-width: 190px !important;
-            max-width: 210px !important;
-        }
-        [data-testid="stSidebar"] .stRadio label span,
-        [data-testid="stSidebar"] .stRadio label p {
-            color: rgba(255,255,255,0.7) !important;
-            font-family: 'DM Sans', sans-serif !important;
-            font-size: 13px !important;
-        }
-        [data-testid="stSidebar"] hr {
-            border-color: rgba(255,255,255,0.1) !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
+    """
+    <style>
+    /* 1. Background and Text color for the Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #F6F4EE !important; /* var(--bg) from patient_main */
+        border-right: 1px solid #D7E3DC !important; /* var(--border) */
+    }
+
+    /* 2. Style the radio buttons/text in the sidebar to match */
+    [data-testid="stSidebar"] .stRadio label p {
+        color: #0C4B43 !important; /* var(--text-main) */
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 500 !important;
+    }
+
+    /* 3. Style the sidebar toggle button (the 'x' and the '>' to open) */
+    [data-testid="stSidebar"] button, [data-testid="collapsedControl"] button {
+        color: #0C4B43 !important;
+    }
+    
+    /* 4. Ensure the main container doesn't leave a gap when sidebar is closed */
+    [data-testid="stAppViewContainer"] {
+        background-color: #F6F4EE !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
     )
 
-# ── Router ──
+# ── Router in app.py ──
 if st.session_state.mode == "patient":
-    from pages.patient_main import render_patient
-    render_patient()
-elif st.session_state.doc_tab == "analyse":
-    from pages.doctor_analysis import render_analysis
-    render_analysis()
-elif st.session_state.doc_tab == "comparer":
-    from pages.doctor_compare import render_compare
-    render_compare()
+    from pages.audio_diagnostic import render_diagnostic
+    render_diagnostic(is_doctor=False) # Normal view
+
 else:
-    from pages.doctor_dashboard import render_dashboard
-    render_dashboard()
+    from pages.audio_diagnostic import render_diagnostic
+    render_diagnostic(is_doctor=True)
