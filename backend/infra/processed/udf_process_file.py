@@ -320,19 +320,18 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     def _setup_librosa():
         import sys, os, io, zipfile
         import_dir = sys._xoptions.get("snowflake_import_directory")
-        if not import_dir:
-            return
-        zip_path = os.path.join(import_dir, "librosa.zip")
         final_lib_dir = "/tmp/site-packages"
         os.makedirs(final_lib_dir, exist_ok=True)
-        with zipfile.ZipFile(zip_path, 'r') as z:
-            for name in z.namelist():
-                if name.endswith('.whl'):
-                    with zipfile.ZipFile(io.BytesIO(z.read(name)), 'r') as whl:
+        zip_path = os.path.join(import_dir, "libroza.zip")
+
+        with zipfile.ZipFile(zip_path, 'r') as outer:
+            for name in outer.namelist():
+                if name.endswith(".whl"):
+                    whl_bytes = outer.read(name)
+                    with zipfile.ZipFile(io.BytesIO(whl_bytes), 'r') as whl:
                         whl.extractall(final_lib_dir)
         if final_lib_dir not in sys.path:
             sys.path.insert(0, final_lib_dir)
-
     
     _setup_librosa()
     import librosa
