@@ -48,12 +48,9 @@ app:
 ingested:
 	@echo "🚀 Deploying INGESTED schema resources..."
 	@python -m backend.infra.ingested.stg_ingested_sounds
-	@python -m backend.infra.ingested.stg_ingested_sounds_processed
-	@python -m backend.infra.ingested.stg_ingested_features
+	@python -m backend.infra.ingested.stg_processed_sounds
 	@python -m backend.infra.ingested.table_ingested_sounds_metadata
-	@python -m backend.infra.ingested.table_ingested_features_metadata
-	@python -m backend.infra.ingested.table_ingested_sounds_processed_metadata
-	@python -m backend.infra.ingested.view_ingested_inference_data
+	@python -m backend.infra.ingested.table_processed_sounds_metadata
 	@echo "✅ Done!"
 	
 infra:
