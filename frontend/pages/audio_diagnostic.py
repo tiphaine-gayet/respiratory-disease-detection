@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
-from backend.router.predictions import load_pharmacies_for_select
+from backend.router.predictions import load_pharmacies_for_select, upload_patient_audio_with_metadata
 
 # ── Path to reference audio files ──
 REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
@@ -115,9 +115,6 @@ def render_diagnostic(is_doctor=False):
         help="Sélectionnez la pharmacie où le test a été effectué.",
     )
     
-    # DEBUG: Print pharmacy ID
-    print(f"🔍 Pharmacy ID selected: {st.session_state.get('selected_pharmacy_id', 'NONE')}")
-
     st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
 
     st.markdown(
@@ -197,8 +194,46 @@ def render_diagnostic(is_doctor=False):
                     st.warning("Veuillez sélectionner une pharmacie avant l'envoi.")
                     st.stop()
 
+                patient_id = st.session_state.get("user_id", "").strip()
+                if not patient_id:
+                    st.error("Identifiant patient introuvable. Veuillez vous reconnecter.")
+                    st.stop()
+
+                uploaded_audio = st.session_state.get("uploaded_audio")
+                if uploaded_audio is None:
+                    st.error("Aucun fichier audio à envoyer.")
+                    st.stop()
+
+                uploaded_audio.seek(0)
+                payload = uploaded_audio.read()
+                if not payload:
+                    st.error("Le fichier audio est vide.")
+                    st.stop()
+
+                stage_file_name = ""
+                audio_metadata = {}
+                try:
+                    with st.spinner("Envoi de l'audio vers la plateforme..."):
+                        stage_file_name, audio_metadata = upload_patient_audio_with_metadata(
+                            audio_bytes=payload,
+                            audio=audio,
+                            sr=sr,
+                            patient_id=patient_id,
+                            pharmacie_id=st.session_state.get("selected_pharmacy_id"),
+                            original_filename=getattr(uploaded_audio, "name", None),
+                        )
+                except Exception as exc:
+                    st.error(f"Impossible d'envoyer l'audio: {exc}")
+                    st.stop()
+
+                if not stage_file_name:
+                    st.error("Le fichier audio n'a pas pu etre enregistre.")
+                    st.stop()
+
                 # Keep selected pharmacy id available for downstream persistence.
                 st.session_state["analysis_pharmacie_id"] = st.session_state["selected_pharmacy_id"]
+                st.session_state["analysis_audio_file_name"] = stage_file_name
+                st.session_state["analysis_audio_metadata"] = audio_metadata
                 st.session_state["analysis_sent"] = True
                 st.rerun()
         else:
