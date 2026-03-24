@@ -9,7 +9,7 @@ from ...utils.snowflake_client import SnowflakeClient
 
 DATABASE = os.getenv("SNOWFLAKE_DATABASE")
 SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_INGESTED")
-TABLE = "INGESTED_SOUNDS_PROCESSED_METADATA"
+TABLE = "PROCESSED_SOUNDS_METADATA"
 
 
 def create_table(client):
@@ -29,6 +29,7 @@ def create_table(client):
             n_samples              INTEGER,
             amplitude_max          FLOAT,
             rms                    FLOAT,
+            mel_spectogram         VARIANT,                   -- JSON with mel spectrogram data (128, T)
             processed_at           TIMESTAMP_NTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP(),
             PRIMARY KEY (file_name),
             FOREIGN KEY (original_file_name) REFERENCES {DATABASE}.{SCHEMA}.INGESTED_SOUNDS_METADATA(file_name)
