@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os 
+import os
 import shutil
 import tempfile
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 import re
 
 import numpy as np
@@ -14,7 +14,6 @@ from backend.router.preprocessing import process_and_store_ingested_audio
 
 
 _DB     = os.getenv("SNOWFLAKE_DATABASE")
-_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_APP")
 _INGESTED_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_INGESTED") or "INGESTED"
 
 
