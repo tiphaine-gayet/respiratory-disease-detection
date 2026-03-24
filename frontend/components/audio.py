@@ -1,7 +1,5 @@
 import tempfile
 import librosa
-import numpy as np
-
 
 def load_audio(uploaded_file, target_sr=None):
     """

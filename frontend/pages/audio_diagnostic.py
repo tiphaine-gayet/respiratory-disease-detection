@@ -1,12 +1,10 @@
 import streamlit as st
-import numpy as np
 import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
 
 
 # ── Path to reference audio files ──
-# patient_main.py lives in frontend/pages/, assets/ is in frontend/assets/
 REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
 
 # ── Reference data for inline comparison ──
@@ -77,7 +75,7 @@ def _load_ref_audio(audio_file):
     return audio, sr_
 
 
-def render_patient():
+def render_diagnostic(is_doctor=False):
     st.markdown(_PATIENT_CSS, unsafe_allow_html=True)
 
     # Logo + tagline
@@ -190,46 +188,52 @@ def render_patient():
             st.session_state["compare_class"] = None
 
         # ── Probability card with inline compare buttons ──
-        st.markdown(
-            '<div class="p-result-card">'
-            '<div class="p-result-title">Probabilités par classe</div>',
-            unsafe_allow_html=True,
-        )
+        with st.container():
+            st.markdown(
+                """
+                <div class="p-result-card">
+                    <div class="p-result-title">Probabilités par classe</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        for name, pct, cls in probas:
-            is_active = st.session_state["compare_class"] == cls
-            active_style = f"background:{_CLS_COLORS[cls]}08; border-left:3px solid {_CLS_COLORS[cls]};" if is_active else ""
+            st.markdown('<div class="proba-outer-card">', unsafe_allow_html=True)
 
-            col_bar, col_btn = st.columns([8, 2])
+            for name, pct, cls in probas:
+                is_active = st.session_state["compare_class"] == cls
+                row_active_class = " is-active" if is_active else ""
 
-            with col_bar:
-                st.markdown(
-                    f"""
-                    <div class="proba-row-interactive" style="{active_style}">
-                        <div class="proba-top">
-                            <span class="proba-name">{name}</span>
-                            <span class="proba-pct proba-{cls}">{pct}%</span>
+                st.markdown(f'<div class="proba-row-inner{row_active_class}">', unsafe_allow_html=True)
+
+                col_bar, col_btn = st.columns([8, 2], gap="small")
+
+                with col_bar:
+                    st.markdown(
+                        f"""
+                        <div class="proba-row-interactive">
+                            <div class="proba-top">
+                                <span class="proba-name">{name}</span>
+                                <span class="proba-pct proba-{cls}">{pct}%</span>
+                            </div>
+                            <div class="proba-bar-track">
+                                <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
+                            </div>
                         </div>
-                        <div class="proba-bar-track">
-                            <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-            with col_btn:
-                btn_label = "✕" if is_active else "Comparer"
-                st.markdown('<div class="compare-btn-wrap">', unsafe_allow_html=True)
-                if st.button(btn_label, key=f"cmp_{cls}"):
-                    if is_active:
-                        st.session_state["compare_class"] = None
-                    else:
-                        st.session_state["compare_class"] = cls
-                    st.rerun()
+                with col_btn:
+                    btn_label = "✕" if is_active else "Comparer"
+                    st.markdown('<div class="compare-btn-wrap">', unsafe_allow_html=True)
+                    if st.button(btn_label, key=f"cmp_{cls}", use_container_width=True):
+                        st.session_state["compare_class"] = None if is_active else cls
+                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
                 st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Inline comparison panel ──
         if st.session_state["compare_class"] is not None:
@@ -399,7 +403,6 @@ _PATIENT_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
 
 :root {
-    /* ── Tessan-inspired light palette from screenshots ── */
     --bg:           #F6F4EE;
     --bg-soft:      #F1EEE6;
     --card:         #FFFFFF;
@@ -416,7 +419,6 @@ _PATIENT_CSS = """
     --yellow-dark:  #D8D54F;
     --shadow:       0 8px 24px rgba(12, 75, 67, 0.05);
 
-    /* disease colors kept for probability chart */
     --c-asthma:  #D95C4F;
     --c-copd:    #D8A63D;
     --c-pneumo:  #5B8DEF;
@@ -427,7 +429,7 @@ _PATIENT_CSS = """
     --font-title: 'Cormorant Garamond', serif;
 }
 
-/* ━━ Global Streamlit reset ━━ */
+/* ━━ Global reset ━━ */
 html, body, .stApp,
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
@@ -453,7 +455,7 @@ footer { display: none !important; }
     gap: 0.75rem !important;
 }
 
-/* ━━ Logo bar ━━ */
+/* ━━ Logo ━━ */
 .p-logo-wrap {
     text-align: center;
     padding: 42px 0 28px;
@@ -488,16 +490,17 @@ footer { display: none !important; }
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 16px; /* Spacing between cards */
+    gap: 16px;
 }
 
-/* ━━ Header block ━━ */
+/* ━━ Header card ━━ */
 .p-card-header {
     margin-bottom: 22px;
     padding: 26px 28px;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 22px;
+    box-shadow: 0 4px 14px rgba(12, 75, 67, 0.03);
 }
 
 .p-icon-row {
@@ -632,7 +635,7 @@ footer { display: none !important; }
     background: var(--border);
 }
 
-/* ━━ Primary button: Tessan-like pale yellow CTA ━━ */
+/* ━━ Default buttons ━━ */
 .stButton > button {
     width: 100% !important;
     padding: 14px 24px !important;
@@ -643,19 +646,13 @@ footer { display: none !important; }
     font-family: var(--font-body) !important;
     font-size: 15px !important;
     font-weight: 600 !important;
-    letter-spacing: 0 !important;
     box-shadow: none !important;
     transition: all 0.2s ease !important;
 }
 
-.stButton > button:hover {
-    background: var(--yellow-dark) !important;
-    color: var(--green) !important;
-    border-color: transparent !important;
-}
-
-.stButton > button:active,
-.stButton > button:focus {
+.stButton > button:hover,
+.stButton > button:focus,
+.stButton > button:active {
     background: var(--yellow-dark) !important;
     color: var(--green) !important;
     border-color: transparent !important;
@@ -664,7 +661,6 @@ footer { display: none !important; }
 }
 
 /* ━━ Replace button ━━ */
-/* ━━ Replace button as small text link under audio ━━ */
 .replace-btn-wrap {
     margin-top: 6px;
     margin-bottom: 10px;
@@ -697,7 +693,7 @@ footer { display: none !important; }
     outline: none !important;
 }
 
-/* ━━ Audio player container feel cleaner in light mode ━━ */
+/* ━━ Audio player ━━ */
 [data-testid="stAudio"] {
     background: var(--card) !important;
     border: 1px solid var(--border) !important;
@@ -706,7 +702,8 @@ footer { display: none !important; }
 }
 
 /* ━━ Section labels ━━ */
-.p-section-label {
+.p-section-label,
+.compare-section-label {
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.14em;
@@ -715,13 +712,14 @@ footer { display: none !important; }
     font-weight: 700;
 }
 
-/* ━━ Result cards ━━ */
+/* ━━ Probability section shell ━━ */
 .p-result-card {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 20px;
     padding: 18px 20px;
     box-shadow: 0 4px 14px rgba(12, 75, 67, 0.03);
+    margin-bottom: 10px;
 }
 
 .p-result-title {
@@ -730,22 +728,49 @@ footer { display: none !important; }
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.10em;
-    margin-bottom: 16px;
+    margin: 0;
     font-family: var(--font-body);
 }
 
-/* ━━ Probability bars ━━ */
-.proba-list {
+/* ━━ Single outer probability card ━━ */
+.proba-outer-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 8px 14px;
+    box-shadow: 0 4px 14px rgba(12, 75, 67, 0.03);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 0;
+}
+
+/* ━━ Individual row inside the outer card ━━ */
+.proba-row-inner {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+}
+
+.proba-row-inner:last-child {
+    border-bottom: none;
+}
+
+.proba-row-inner.is-active {
+    background: transparent;
+}
+
+.proba-row-interactive {
+    padding: 4px 2px 2px;
+    border-radius: 10px;
+    border-left: 3px solid transparent;
+    transition: background 0.15s ease;
 }
 
 .proba-top {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 .proba-name {
@@ -774,79 +799,52 @@ footer { display: none !important; }
     transition: width 0.6s ease;
 }
 
-.proba-asthma  { color: var(--c-asthma);  } .bar-asthma  { background: var(--c-asthma);  }
-.proba-copd    { color: var(--c-copd);    } .bar-copd    { background: var(--c-copd);    }
-.proba-pneumo  { color: var(--c-pneumo);  } .bar-pneumo  { background: var(--c-pneumo);  }
-.proba-bronchi { color: var(--c-bronchi); } .bar-bronchi { background: var(--c-bronchi); }
-.proba-healthy { color: var(--c-healthy); } .bar-healthy { background: var(--c-healthy); }
+.proba-asthma  { color: var(--c-asthma);  }
+.proba-copd    { color: var(--c-copd);    }
+.proba-pneumo  { color: var(--c-pneumo);  }
+.proba-bronchi { color: var(--c-bronchi); }
+.proba-healthy { color: var(--c-healthy); }
 
-/* ━━ Interactive probability row (with compare button) ━━ */
-.proba-row-interactive {
-    padding: 8px 10px 6px;
-    border-radius: 10px;
-    border-left: 3px solid transparent;
-    transition: background 0.15s ease;
-}
+.bar-asthma  { background: var(--c-asthma);  }
+.bar-copd    { background: var(--c-copd);    }
+.bar-pneumo  { background: var(--c-pneumo);  }
+.bar-bronchi { background: var(--c-bronchi); }
+.bar-healthy { background: var(--c-healthy); }
 
-.proba-row-interactive .proba-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
-}
-
-/* ━━ Compare button — small pill aligned right via column ━━ */
+/* ━━ Compare button inside row card ━━ */
 .compare-btn-wrap {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: stretch;
     height: 100%;
-    padding-top: 10px;
 }
 
 .compare-btn-wrap .stButton {
-    width: auto !important;
-    display: inline-flex !important;
+    width: 100% !important;
 }
 
 .compare-btn-wrap .stButton > button {
-    all: unset !important;
-    cursor: pointer !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: auto !important;
-    min-width: unset !important;
-    min-height: unset !important;
-    background: var(--card) !important;
-    border: 1px solid var(--border) !important;
-    padding: 5px 14px !important;
-    color: var(--text-soft) !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    line-height: 1.4 !important;
-    border-radius: 8px !important;
-    box-shadow: none !important;
-    letter-spacing: 0 !important;
+    width: 100% !important;
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+    background: var(--yellow) !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    color: var(--green) !important;
     font-family: var(--font-body) !important;
-    white-space: nowrap !important;
-    transition: all 0.15s ease !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
 }
 
-.compare-btn-wrap .stButton > button:hover {
-    background: var(--green-4) !important;
-    border-color: var(--green) !important;
+.compare-btn-wrap .stButton > button:hover,
+.compare-btn-wrap .stButton > button:focus,
+.compare-btn-wrap .stButton > button:active {
+    background: var(--yellow-dark) !important;
     color: var(--green) !important;
-}
-
-.compare-btn-wrap .stButton > button:active,
-.compare-btn-wrap .stButton > button:focus {
-    background: var(--green-4) !important;
-    border-color: var(--green) !important;
-    color: var(--green) !important;
+    border-color: transparent !important;
     box-shadow: none !important;
     outline: none !important;
-    transform: none !important;
 }
 
 /* ━━ Comparison panel ━━ */
@@ -856,6 +854,7 @@ footer { display: none !important; }
     overflow: hidden;
     margin-top: 8px;
     margin-bottom: 8px;
+    background: var(--card);
 }
 
 .compare-panel-header {
@@ -898,17 +897,7 @@ footer { display: none !important; }
     font-family: var(--font-body);
 }
 
-/* ━━ Compare section labels ━━ */
-.compare-section-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    letter-spacing: 0.14em;
-    margin: 14px 0 6px;
-    font-family: var(--font-body);
-    font-weight: 700;
-}
-
-/* ━━ Column tags (Patient / Référence) ━━ */
+/* ━━ Compare labels ━━ */
 .compare-col-tag {
     font-size: 10px;
     font-weight: 600;
@@ -931,7 +920,7 @@ footer { display: none !important; }
     color: #3B6DC2;
 }
 
-/* ━━ Compare probability mini-cards ━━ */
+/* ━━ Compare probability cards ━━ */
 .cmp-proba-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -988,10 +977,14 @@ footer { display: none !important; }
     border-radius: 10px !important;
 }
 
-.compare-close-wrap .stButton > button:hover {
+.compare-close-wrap .stButton > button:hover,
+.compare-close-wrap .stButton > button:focus,
+.compare-close-wrap .stButton > button:active {
     background: #FDF0EC !important;
     border-color: var(--c-asthma) !important;
     color: var(--c-asthma) !important;
+    box-shadow: none !important;
+    outline: none !important;
 }
 
 /* ━━ Recommendation card ━━ */
@@ -1053,14 +1046,14 @@ footer { display: none !important; }
     font-family: var(--font-body) !important;
 }
 
-/* ━━ Make matplotlib/chart blocks feel embedded in light UI ━━ */
+/* ━━ Charts ━━ */
 [data-testid="stImage"],
 [data-testid="stPlotlyChart"],
 [data-testid="stMarkdownContainer"] canvas {
     border-radius: 18px !important;
 }
 
-/* ━━ Responsive tune ━━ */
+/* ━━ Responsive ━━ */
 @media (max-width: 900px) {
     .p-title {
         font-size: 34px;
