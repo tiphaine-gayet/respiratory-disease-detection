@@ -1,6 +1,7 @@
 .env
 venv/
-
+/backend/models/cache_mel
+/backend/models/resnet
 asthma_detection_dataset/
 Des.txt
 *.zip
