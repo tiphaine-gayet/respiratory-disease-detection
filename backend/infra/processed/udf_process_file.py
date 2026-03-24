@@ -304,7 +304,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
     PACKAGES = ('scipy', 'numpy', 'pandas')
-    IMPORTS = ('@M2_ISD_EQUIPE_1_DB.PUBLIC.STG_LIBRARIES/libs/libroza.zip')
+    IMPORTS = ('@"M2_ISD_EQUIPE_1_DB"."PUBLIC"."STG_LIBRARIES"/libs/libroza.zip')
     HANDLER = 'process_file_udf_handler'
     AS $$
     import sys

@@ -299,7 +299,7 @@ def deploy_udf_extract_features(session, udf_name: str = "EXTRACT_FEATURES_UDF")
         file_name: str,
         class_name: str,
         save_to_stage: bool,
-        output_stage: str
+        output_stage: str = "@M2_ISD_EQUIPE_1_DB.TEST.STG_RESPIRATORY_FEATURES"
     ) -> dict:
         try:
             if not stage_name.endswith('/'):
