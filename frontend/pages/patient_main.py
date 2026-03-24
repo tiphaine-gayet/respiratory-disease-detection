@@ -1,7 +1,80 @@
 import streamlit as st
 import numpy as np
+import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
+
+
+# ── Path to reference audio files ──
+# patient_main.py lives in frontend/pages/, assets/ is in frontend/assets/
+REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
+
+# ── Reference data for inline comparison ──
+REF_AUDIOS = {
+    "Asthme": {
+        "label": "Asthme modéré — Homme 52 ans",
+        "meta": "Réf. RESP-A-042 · 5.1s · Sibilances bilatérales",
+        "probas": [("Asthme", 78, "asthma"), ("BPCO", 12, "copd"), ("Pneumonie", 5, "pneumo"), ("Bronchite", 3, "bronchi"), ("Sain", 2, "healthy")],
+        "similarity": 74,
+        "audio_file": "asthma.wav",
+    },
+    "BPCO": {
+        "label": "BPCO stade II — Femme 64 ans",
+        "meta": "Réf. RESP-B-018 · 4.4s · Expiration prolongée",
+        "probas": [("Asthme", 15, "asthma"), ("BPCO", 71, "copd"), ("Pneumonie", 8, "pneumo"), ("Bronchite", 4, "bronchi"), ("Sain", 2, "healthy")],
+        "similarity": 41,
+        "audio_file": "copd.wav",
+    },
+    "Pneumonie": {
+        "label": "Pneumonie lobaire — Homme 38 ans",
+        "meta": "Réf. RESP-P-009 · 4.9s · Crépitants fins",
+        "probas": [("Asthme", 8, "asthma"), ("BPCO", 11, "copd"), ("Pneumonie", 68, "pneumo"), ("Bronchite", 9, "bronchi"), ("Sain", 4, "healthy")],
+        "similarity": 29,
+        "audio_file": "pneumonie.wav",
+    },
+    "Bronchite": {
+        "label": "Bronchite aiguë — Femme 45 ans",
+        "meta": "Réf. RESP-BR-007 · 4.6s · Ronchi diffus",
+        "probas": [("Asthme", 10, "asthma"), ("BPCO", 9, "copd"), ("Pneumonie", 6, "pneumo"), ("Bronchite", 65, "bronchi"), ("Sain", 10, "healthy")],
+        "similarity": 22,
+        "audio_file": "bronchite.wav",
+    },
+    "Sain": {
+        "label": "Respiration normale — Femme 29 ans",
+        "meta": "Réf. RESP-N-001 · 5.0s · Contrôle",
+        "probas": [("Asthme", 5, "asthma"), ("BPCO", 4, "copd"), ("Pneumonie", 3, "pneumo"), ("Bronchite", 6, "bronchi"), ("Sain", 82, "healthy")],
+        "similarity": 18,
+        "audio_file": "sain.wav",
+    },
+}
+
+# Map class keys used in probas to REF_AUDIOS keys
+_CLS_TO_REF = {
+    "asthma": "Asthme",
+    "copd": "BPCO",
+    "pneumo": "Pneumonie",
+    "bronchi": "Bronchite",
+    "healthy": "Sain",
+}
+
+# Disease-class color map
+_CLS_COLORS = {
+    "asthma": "#D95C4F",
+    "copd": "#D8A63D",
+    "pneumo": "#5B8DEF",
+    "bronchi": "#58A889",
+    "healthy": "#9AA8A5",
+}
+
+
+@st.cache_data
+def _load_ref_audio(audio_file):
+    """Load and preprocess a reference audio file (cached)."""
+    import librosa
+    path = os.path.join(REF_AUDIO_DIR, audio_file)
+    audio, sr_ = librosa.load(path, sr=22050)
+    audio = librosa.util.normalize(audio)
+    return audio, sr_
 
 
 def render_patient():
@@ -18,150 +91,293 @@ def render_patient():
         unsafe_allow_html=True,
     )
 
-    # Wider centered card
-    _, card_col, _ = st.columns([1, 3, 1])
+    # ── Main content area (full-width with padding via CSS) ──
+    st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
 
-    with card_col:
+    st.markdown(
+        """
+        <div class="p-card-header">
+            <div class="p-icon-row">
+                <div class="p-header-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v4l3 3"/></svg>
+                </div>
+                <span class="p-header-badge">Analyse IA</span>
+            </div>
+            <div class="p-title">Analyse respiratoire</div>
+            <div class="p-subtitle">
+                Déposez ou enregistrez votre respiration. Notre IA analyse en temps réel
+                et transmet un pré-diagnostic à votre médecin.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ── File upload / replace logic ──
+    if "uploaded_audio" not in st.session_state:
+        st.session_state["uploaded_audio"] = None
+        st.session_state["audio_data"] = None
+        st.session_state["audio_sr"] = None
+
+    if st.session_state["uploaded_audio"] is None:
+        # Show uploader
+        uploaded_file = st.file_uploader(
+            "Déposer un fichier audio",
+            type=["wav", "mp3", "flac"],
+            label_visibility="collapsed",
+        )
+
+        st.markdown('<div class="p-or">ou</div>', unsafe_allow_html=True)
+
+        if st.button("🎙  Commencer l'enregistrement", use_container_width=True):
+            st.session_state["recorded"] = True
+
+        if uploaded_file:
+            if not uploaded_file.name.endswith((".wav", ".mp3", ".flac")):
+                st.error("Format non supporté")
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+            uploaded_file.seek(0)
+            with st.spinner("Chargement…"):
+                audio, sr = load_audio(uploaded_file)
+                audio, sr = preprocess_audio(audio, sr)
+            st.session_state["uploaded_audio"] = uploaded_file
+            st.session_state["audio_data"] = audio
+            st.session_state["audio_sr"] = sr
+            st.rerun()
+    else:
+
+        # ── Audio player + replace button ──
+        st.session_state["uploaded_audio"].seek(0)
+        st.audio(st.session_state["uploaded_audio"])
+        st.markdown('<div class="replace-btn-wrap">', unsafe_allow_html=True)
+        if st.button("Remplacer le fichier", key="replace_audio"):
+            st.session_state["uploaded_audio"] = None
+            st.session_state["audio_data"] = None
+            st.session_state["audio_sr"] = None
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        audio = st.session_state["audio_data"]
+        sr = st.session_state["audio_sr"]
+
+        # ── Forme d'onde ──
+        st.markdown(
+            '<div class="p-section-label">FORME D\'ONDE</div>',
+            unsafe_allow_html=True,
+        )
+        st.pyplot(waveform_chart(audio, sr), use_container_width=True)
+
+        # ── Mel-Spectrogramme ──
+        st.markdown(
+            '<div class="p-section-label">MEL-SPECTROGRAMME</div>',
+            unsafe_allow_html=True,
+        )
+        st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
+
+        # TODO: Replace fake data with model predictions
+        # e.g. probas = model.predict(audio, sr)
+        probas = [
+            ("Asthme", 62, "asthma"),
+            ("BPCO", 18, "copd"),
+            ("Pneumonie", 10, "pneumo"),
+            ("Bronchite", 7, "bronchi"),
+            ("Sain", 3, "healthy"),
+        ]
+
+        # ── Init compare state ──
+        if "compare_class" not in st.session_state:
+            st.session_state["compare_class"] = None
+
+        # ── Probability card with inline compare buttons ──
+        st.markdown(
+            '<div class="p-result-card">'
+            '<div class="p-result-title">Probabilités par classe</div>',
+            unsafe_allow_html=True,
+        )
+
+        for name, pct, cls in probas:
+            is_active = st.session_state["compare_class"] == cls
+            active_style = f"background:{_CLS_COLORS[cls]}08; border-left:3px solid {_CLS_COLORS[cls]};" if is_active else ""
+
+            col_bar, col_btn = st.columns([8, 2])
+
+            with col_bar:
+                st.markdown(
+                    f"""
+                    <div class="proba-row-interactive" style="{active_style}">
+                        <div class="proba-top">
+                            <span class="proba-name">{name}</span>
+                            <span class="proba-pct proba-{cls}">{pct}%</span>
+                        </div>
+                        <div class="proba-bar-track">
+                            <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            with col_btn:
+                btn_label = "✕" if is_active else "Comparer"
+                st.markdown('<div class="compare-btn-wrap">', unsafe_allow_html=True)
+                if st.button(btn_label, key=f"cmp_{cls}"):
+                    if is_active:
+                        st.session_state["compare_class"] = None
+                    else:
+                        st.session_state["compare_class"] = cls
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── Inline comparison panel ──
+        if st.session_state["compare_class"] is not None:
+            active_cls = st.session_state["compare_class"]
+            ref_key = _CLS_TO_REF[active_cls]
+            ref = REF_AUDIOS[ref_key]
+            cls_color = _CLS_COLORS[active_cls]
+
+            st.markdown(
+                f"""
+                <div class="compare-panel" style="border-color: {cls_color};">
+                    <div class="compare-panel-header" style="background: {cls_color}12;">
+                        <div>
+                            <span class="compare-panel-tag" style="background:{cls_color}; color:#fff;">
+                                Comparaison — {ref_key}
+                            </span>
+                            <span class="compare-panel-meta">{ref['meta']}</span>
+                        </div>
+                        <span class="compare-panel-sim">
+                            Similarité spectrale
+                            <strong>{ref['similarity']}%</strong>
+                        </span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Load reference audio
+            ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
+
+            # ── Side-by-side waveforms ──
+            st.markdown(
+                '<div class="compare-section-label">FORME D\'ONDE</div>',
+                unsafe_allow_html=True,
+            )
+            cw_p, cw_r = st.columns(2)
+            with cw_p:
+                st.markdown(
+                    '<div class="compare-col-tag tag-patient">Patient</div>',
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(waveform_chart(audio, sr), use_container_width=True)
+            with cw_r:
+                st.markdown(
+                    '<div class="compare-col-tag tag-ref">Référence</div>',
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(waveform_chart(ref_audio, ref_sr), use_container_width=True)
+
+            # ── Side-by-side mel spectrograms ──
+            st.markdown(
+                '<div class="compare-section-label">MEL-SPECTROGRAMME</div>',
+                unsafe_allow_html=True,
+            )
+            cm_p, cm_r = st.columns(2)
+            with cm_p:
+                st.markdown(
+                    '<div class="compare-col-tag tag-patient">Patient</div>',
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
+            with cm_r:
+                st.markdown(
+                    '<div class="compare-col-tag tag-ref">Référence</div>',
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(mel_spectrogram(ref_audio, ref_sr), use_container_width=True)
+
+            # ── Side-by-side probabilities ──
+            st.markdown(
+                '<div class="compare-section-label">PROBABILITÉS COMPARÉES</div>',
+                unsafe_allow_html=True,
+            )
+            cp_p, cp_r = st.columns(2)
+            with cp_p:
+                st.markdown(
+                    '<div class="compare-col-tag tag-patient">Patient</div>',
+                    unsafe_allow_html=True,
+                )
+                patient_rows = ""
+                for pname, ppct, pcls in probas:
+                    patient_rows += f"""
+                    <div class="cmp-proba-row">
+                        <span class="cmp-proba-name">{pname}</span>
+                        <span class="cmp-proba-pct proba-{pcls}">{ppct}%</span>
+                        <div class="proba-bar-track" style="margin-top:4px;">
+                            <div class="proba-bar-fill bar-{pcls}" style="width:{ppct}%"></div>
+                        </div>
+                    </div>"""
+                st.markdown(
+                    f'<div class="cmp-proba-card">{patient_rows}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            with cp_r:
+                st.markdown(
+                    '<div class="compare-col-tag tag-ref">Référence</div>',
+                    unsafe_allow_html=True,
+                )
+                ref_rows = ""
+                for rname, rpct, rcls in ref["probas"]:
+                    ref_rows += f"""
+                    <div class="cmp-proba-row">
+                        <span class="cmp-proba-name">{rname}</span>
+                        <span class="cmp-proba-pct proba-{rcls}">{rpct}%</span>
+                        <div class="proba-bar-track" style="margin-top:4px;">
+                            <div class="proba-bar-fill bar-{rcls}" style="width:{rpct}%"></div>
+                        </div>
+                    </div>"""
+                st.markdown(
+                    f'<div class="cmp-proba-card">{ref_rows}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Close comparison button at bottom
+            st.markdown('<div class="compare-close-wrap">', unsafe_allow_html=True)
+            if st.button("✕  Fermer la comparaison", key="close_cmp", use_container_width=True):
+                st.session_state["compare_class"] = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── Recommandation ──
+        # TODO: Generate recommendation text dynamically from model output
         st.markdown(
             """
-            <div class="p-card-header">
-                <div class="p-icon-row">
-                    <div class="p-header-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v4l3 3"/></svg>
+            <div class="rec-card">
+                <div class="rec-header">
+                    <div class="rec-icon-wrap">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     </div>
-                    <span class="p-header-badge">Analyse IA</span>
+                    <div class="rec-title">Recommandation d'action</div>
                 </div>
-                <div class="p-title">Analyse respiratoire</div>
-                <div class="p-subtitle">
-                    Déposez ou enregistrez votre respiration. Notre IA analyse en temps réel
-                    et transmet un pré-diagnostic à votre médecin.
+                <div class="rec-body">
+                    Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
+                    Un suivi médical dans les <strong>48–72h</strong> est recommandé.
+                    En l'absence de symptômes aigus, une consultation de routine suffit.
+                    Si sibilances ou dyspnée aiguë : consultation urgente.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # ── File upload / replace logic ──
-        if "uploaded_audio" not in st.session_state:
-            st.session_state["uploaded_audio"] = None
-            st.session_state["audio_data"] = None
-            st.session_state["audio_sr"] = None
+        if st.button("Envoyer au médecin →", use_container_width=True, key="analyze"):
+            st.success("Analyse envoyée au médecin ✔️")
 
-        if st.session_state["uploaded_audio"] is None:
-            # Show uploader
-            uploaded_file = st.file_uploader(
-                "Déposer un fichier audio",
-                type=["wav", "mp3", "flac"],
-                label_visibility="collapsed",
-            )
-
-            st.markdown('<div class="p-or">ou</div>', unsafe_allow_html=True)
-
-            if st.button("🎙  Commencer l'enregistrement", use_container_width=True):
-                st.session_state["recorded"] = True
-
-            if uploaded_file:
-                if not uploaded_file.name.endswith((".wav", ".mp3", ".flac")):
-                    st.error("Format non supporté")
-                    return
-                uploaded_file.seek(0)
-                with st.spinner("Chargement…"):
-                    audio, sr = load_audio(uploaded_file)
-                    audio, sr = preprocess_audio(audio, sr)
-                st.session_state["uploaded_audio"] = uploaded_file
-                st.session_state["audio_data"] = audio
-                st.session_state["audio_sr"] = sr
-                st.rerun()
-        else:
-            
-            # ── Audio player + replace button ──
-            st.session_state["uploaded_audio"].seek(0)
-            st.audio(st.session_state["uploaded_audio"])
-            st.markdown('<div class="replace-btn-wrap">', unsafe_allow_html=True)
-            if st.button("Remplacer le fichier", key="replace_audio"):
-                st.session_state["uploaded_audio"] = None
-                st.session_state["audio_data"] = None
-                st.session_state["audio_sr"] = None
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            audio = st.session_state["audio_data"]
-            sr = st.session_state["audio_sr"]
-
-            # ── Forme d'onde ──
-            st.markdown(
-                '<div class="p-section-label">FORME D\'ONDE</div>',
-                unsafe_allow_html=True,
-            )
-            st.pyplot(waveform_chart(audio, sr), use_container_width=True)
-
-            # ── Mel-Spectrogramme ──
-            st.markdown(
-                '<div class="p-section-label">MEL-SPECTROGRAMME</div>',
-                unsafe_allow_html=True,
-            )
-            st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
-
-            # TODO: Replace fake data with model predictions
-            # e.g. probas = model.predict(audio, sr)
-            probas = [
-                ("Asthme", 62, "asthma"),
-                ("BPCO", 18, "copd"),
-                ("Pneumonie", 10, "pneumo"),
-                ("Bronchite", 7, "bronchi"),
-                ("Sain", 3, "healthy"),
-            ]
-
-            rows_html = ""
-            for name, pct, cls in probas:
-                rows_html += f"""
-                <div class="proba-row">
-                    <div class="proba-top">
-                        <span class="proba-name">{name}</span>
-                        <span class="proba-pct proba-{cls}">{pct}%</span>
-                    </div>
-                    <div class="proba-bar-track">
-                        <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
-                    </div>
-                </div>
-                """
-
-            st.markdown(
-                f"""
-                <div class="p-result-card">
-                    <div class="p-result-title">Probabilités par classe</div>
-                    <div class="proba-list">
-                        {rows_html}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            
-            # ── Recommandation ──
-            # TODO: Generate recommendation text dynamically from model output
-            st.markdown(
-                """
-                <div class="rec-card">
-                    <div class="rec-header">
-                        <div class="rec-icon-wrap">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        </div>
-                        <div class="rec-title">Recommandation d'action</div>
-                    </div>
-                    <div class="rec-body">
-                        Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
-                        Un suivi médical dans les <strong>48–72h</strong> est recommandé.
-                        En l'absence de symptômes aigus, une consultation de routine suffit.
-                        Si sibilances ou dyspnée aiguë : consultation urgente.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if st.button("Envoyer au médecin →", use_container_width=True, key="analyze"):
-                st.success("Analyse envoyée au médecin ✔️")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -225,8 +441,9 @@ html, body, .stApp,
 }
 
 .block-container {
-    padding: 0 0 40px 0 !important;
-    max-width: 100% !important;
+    padding: 40px 20px !important;
+    max-width: 800px !important;
+    margin: 0 auto !important;
 }
 
 header[data-testid="stHeader"] { display: none !important; }
@@ -265,15 +482,13 @@ footer { display: none !important; }
     text-transform: uppercase;
 }
 
-/* ━━ Main card wrapper ━━ */
-[data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(2) > div {
-    background: var(--card-soft) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 28px !important;
-    padding: 28px 30px 26px !important;
-    max-width: 980px !important;
-    margin: 0 auto !important;
-    box-shadow: var(--shadow);
+/* ━━ Main content wrapper ━━ */
+.p-content-wrap {
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px; /* Spacing between cards */
 }
 
 /* ━━ Header block ━━ */
@@ -565,6 +780,220 @@ footer { display: none !important; }
 .proba-bronchi { color: var(--c-bronchi); } .bar-bronchi { background: var(--c-bronchi); }
 .proba-healthy { color: var(--c-healthy); } .bar-healthy { background: var(--c-healthy); }
 
+/* ━━ Interactive probability row (with compare button) ━━ */
+.proba-row-interactive {
+    padding: 8px 10px 6px;
+    border-radius: 10px;
+    border-left: 3px solid transparent;
+    transition: background 0.15s ease;
+}
+
+.proba-row-interactive .proba-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
+/* ━━ Compare button — small pill aligned right via column ━━ */
+.compare-btn-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    padding-top: 10px;
+}
+
+.compare-btn-wrap .stButton {
+    width: auto !important;
+    display: inline-flex !important;
+}
+
+.compare-btn-wrap .stButton > button {
+    all: unset !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+    min-width: unset !important;
+    min-height: unset !important;
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    padding: 5px 14px !important;
+    color: var(--text-soft) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    line-height: 1.4 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    letter-spacing: 0 !important;
+    font-family: var(--font-body) !important;
+    white-space: nowrap !important;
+    transition: all 0.15s ease !important;
+}
+
+.compare-btn-wrap .stButton > button:hover {
+    background: var(--green-4) !important;
+    border-color: var(--green) !important;
+    color: var(--green) !important;
+}
+
+.compare-btn-wrap .stButton > button:active,
+.compare-btn-wrap .stButton > button:focus {
+    background: var(--green-4) !important;
+    border-color: var(--green) !important;
+    color: var(--green) !important;
+    box-shadow: none !important;
+    outline: none !important;
+    transform: none !important;
+}
+
+/* ━━ Comparison panel ━━ */
+.compare-panel {
+    border: 2px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+.compare-panel-header {
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.compare-panel-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-family: var(--font-body);
+    letter-spacing: 0.02em;
+}
+
+.compare-panel-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 10px;
+    font-family: var(--font-body);
+}
+
+.compare-panel-sim {
+    font-size: 12px;
+    color: var(--text-soft);
+    font-family: var(--font-body);
+    font-weight: 400;
+}
+
+.compare-panel-sim strong {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-left: 6px;
+    font-family: var(--font-body);
+}
+
+/* ━━ Compare section labels ━━ */
+.compare-section-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.14em;
+    margin: 14px 0 6px;
+    font-family: var(--font-body);
+    font-weight: 700;
+}
+
+/* ━━ Column tags (Patient / Référence) ━━ */
+.compare-col-tag {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-bottom: 6px;
+    font-family: var(--font-body);
+}
+
+.tag-patient {
+    background: #FDF0EC;
+    color: #D95C4F;
+}
+
+.tag-ref {
+    background: #EAF1FB;
+    color: #3B6DC2;
+}
+
+/* ━━ Compare probability mini-cards ━━ */
+.cmp-proba-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cmp-proba-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.cmp-proba-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-main);
+    font-family: var(--font-body);
+    flex: 1;
+}
+
+.cmp-proba-pct {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-body);
+}
+
+.cmp-proba-row .proba-bar-track {
+    width: 100%;
+    height: 5px;
+}
+
+.cmp-proba-row .proba-bar-fill {
+    height: 5px;
+}
+
+/* ━━ Close comparison button ━━ */
+.compare-close-wrap {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.compare-close-wrap .stButton > button {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-muted) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    padding: 8px 16px !important;
+    border-radius: 10px !important;
+}
+
+.compare-close-wrap .stButton > button:hover {
+    background: #FDF0EC !important;
+    border-color: var(--c-asthma) !important;
+    color: var(--c-asthma) !important;
+}
+
 /* ━━ Recommendation card ━━ */
 .rec-card {
     background: #F3F7F4;
@@ -637,10 +1066,8 @@ footer { display: none !important; }
         font-size: 34px;
     }
 
-    [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(2) > div {
-        max-width: 100% !important;
-        padding: 20px !important;
-        border-radius: 22px !important;
+    .p-content-wrap {
+        padding: 0 16px 30px;
     }
 
     .p-card-header {
@@ -649,3 +1076,4 @@ footer { display: none !important; }
 }
 </style>
 """
+
