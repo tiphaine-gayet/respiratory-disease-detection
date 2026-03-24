@@ -1,24 +1,21 @@
-CREATE OR REPLACE PROCEDURE M2_ISD_EQUIPE_1_DB.MODEL.RUN_INFERENCE(mel_npy_filename VARCHAR)
+CREATE OR REPLACE PROCEDURE M2_ISD_EQUIPE_1_DB.MODEL.RUN_INFERENCE("MEL_NPY_FILENAME" VARCHAR)
 RETURNS VARIANT
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.9'
-PACKAGES = ('snowflake-snowpark-python', 'pytorch', 'torchvision', 'numpy')
-IMPORTS = (
-    '@"M2_ISD_EQUIPE_1_DB"."MODEL"."STG_MODEL"/v0/best_model.pth',
-    '@"M2_ISD_EQUIPE_1_DB"."MODEL"."STG_MODEL"/v0/model_metadata.pkl'
-)
+PACKAGES = ('snowflake-snowpark-python','pytorch','torchvision','numpy')
 HANDLER = 'run_inference'
-AS
-$$
-import sys, os, pickle, torch, numpy as np, tempfile
+IMPORTS = ('@M2_ISD_EQUIPE_1_DB.MODEL.STG_MODEL/v0/best_model.pth','@M2_ISD_EQUIPE_1_DB.MODEL.STG_MODEL/v0/model_metadata.pkl')
+EXECUTE AS OWNER
+AS '
+import sys, os, pickle, torch, numpy as np, io
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet34
+from snowflake.snowpark.files import SnowflakeFile
 
 def run_inference(session, mel_npy_filename):
     import_dir = sys._xoptions.get("snowflake_import_directory", "/tmp")
 
-    # ── 1. Charger metadata & modèle ──
     with open(os.path.join(import_dir, "model_metadata.pkl"), "rb") as f:
         metadata = pickle.load(f)
 
@@ -51,12 +48,9 @@ def run_inference(session, mel_npy_filename):
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
 
-    # ── 2. Télécharger le .npy et prédire ──
-    def predict_from_npy(file_path):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            session.file.get(file_path, tmp_dir)
-            local_file = os.path.join(tmp_dir, os.path.basename(file_path))
-            feat_data  = np.load(local_file)
+    def predict_from_npy(stage_path):
+        with SnowflakeFile.open(stage_path, ''rb'', require_scoped_url=False) as f:
+            feat_data = np.load(io.BytesIO(f.read()))
 
         t = torch.tensor(feat_data).float()
         if t.dim() == 1:   t = t.unsqueeze(0)
@@ -77,14 +71,14 @@ def run_inference(session, mel_npy_filename):
             size=img_size,
             mode="bilinear", align_corners=False
         ).squeeze(0)
-        t = t.unsqueeze(0)  # batch dim
+        t = t.unsqueeze(0)
 
         with torch.no_grad():
             probs = torch.softmax(model(t), dim=1)[0].numpy()
 
         return probs
 
-    stage_path = f"@M2_ISD_EQUIPE_1_DB.INGESTED.STG_MEL_NPY/{mel_npy_filename}"
+    stage_path = f''@M2_ISD_EQUIPE_1_DB.INGESTED.STG_MEL_NPY/{mel_npy_filename}''
     probs      = predict_from_npy(stage_path)
     prob_map   = {cls: round(float(probs[i]) * 100, 2) for i, cls in enumerate(class_names)}
 
@@ -97,4 +91,4 @@ def run_inference(session, mel_npy_filename):
         "pct_confiance": round(float(np.max(probs)) * 100, 2),
         "model_version": model_version,
     }
-$$;
+';
