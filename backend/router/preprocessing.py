@@ -95,9 +95,8 @@ def process_file(y_raw, sr_raw, file_name, class_name):
       1. Resample → TARGET_SR
       2. Bandpass filter 100-2000 Hz
       3. Trim silence début ET fin
-      4. Rejet si durée < MIN_DURATION_S
-      5. Pad / crop → TARGET_DURATION_S
-      6. Normalisation amplitude
+      4. Pad / crop → TARGET_DURATION_S
+      5. Normalisation amplitude
     """
     original_duration = len(y_raw) / sr_raw
 
@@ -115,25 +114,10 @@ def process_file(y_raw, sr_raw, file_name, class_name):
     y, leading_s, trailing_s = trim_silence(y, sr)
     stripped_duration = len(y) / sr
 
-    # 4. Rejet si trop court
-    # if stripped_duration < MIN_DURATION_S:
-    #     return None, sr, {
-    #         "FILE_NAME":           file_name,
-    #         "CLASS":               class_name,
-    #         "ACTION":              "SKIPPED_TOO_SHORT",
-    #         "ORIGINAL_DURATION_S": round(original_duration, 4),
-    #         "STRIPPED_DURATION_S": round(stripped_duration, 4),
-    #         "FINAL_DURATION_S":    None,
-    #         "LEADING_SILENCE_S":   round(leading_s, 4),
-    #         "TRAILING_SILENCE_S":  round(trailing_s, 4),
-    #         "AMPLITUDE_MAX":       None,
-    #         "RMS":                 None,
-    #     }
-
-    # 5. Pad / crop
+    # 4. Pad / crop
     y = pad_or_crop(y, sr)
 
-    # 6. Normalisation
+    # 5. Normalisation
     y = normalize_amplitude(y)
 
     # Labelling action
@@ -185,6 +169,13 @@ def process_and_store_ingested_audio(
 
     Returns the processed file name (key in STG_PROCESSED_SOUNDS).
     """
+    if not audio_bytes:
+        raise ValueError("audio_bytes is empty.")
+    if not original_file_name or not original_file_name.strip():
+        raise ValueError("original_file_name is required.")
+    if not patient_id or not str(patient_id).strip():
+        raise ValueError("patient_id is required.")
+
     # 1. Load raw audio
     y_raw, sr_raw = librosa.load(io.BytesIO(audio_bytes), sr=None)
 

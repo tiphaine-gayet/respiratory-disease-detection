@@ -4,12 +4,10 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from datetime import date
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 import numpy as np
-from datetime import date
 
 from backend.utils.snowflake_client import SnowflakeClient
 from backend.router.preprocessing import process_and_store_ingested_audio
@@ -47,7 +45,7 @@ def upload_patient_audio_to_stage(audio_bytes: bytes, patient_id: str, original_
     if not safe_patient_id:
         raise ValueError("patient_id contains no valid characters.")
 
-    timestamp_utc = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    timestamp_utc = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
     stage_file_name = f"{safe_patient_id}_{timestamp_utc}{ext}"
 
     temp_dir = Path(tempfile.mkdtemp(prefix="resp-audio-"))

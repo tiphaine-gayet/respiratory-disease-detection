@@ -28,10 +28,6 @@ _SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_APP")
 _PREDICTIONS_TABLE   = f"{_DB}.{_SCHEMA}.PREDICTIONS"
 _PHARMACIES_TABLE    = f"{_DB}.{_SCHEMA}.PHARMACIES_FRANCE"
 
-_PREDICTIONS_TABLE   = f"{_DB}.{_SCHEMA}.PREDICTIONS"
-_PHARMACIES_TABLE    = f"{_DB}.{_SCHEMA}.PHARMACIES_FRANCE"
-
-
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def load_predictions(date_from: date, date_to: date) -> pd.DataFrame:
