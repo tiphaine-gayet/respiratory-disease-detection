@@ -303,7 +303,7 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
     RETURNS VARIANT
     LANGUAGE PYTHON
     RUNTIME_VERSION = '3.11'
-    PACKAGES = ('scipy', 'numpy', 'pandas')
+    PACKAGES = ('scipy', 'numpy', 'pandas', 'snowflake-snowpark-python')
     HANDLER = 'process_file_udf_handler'
     AS $$
     import io
