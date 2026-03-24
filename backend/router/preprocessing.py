@@ -223,7 +223,7 @@ def process_and_store_ingested_audio(
             "n_samples":           meta["N_SAMPLES"],
             "amplitude_max":       meta["AMPLITUDE_MAX"],
             "rms":                 meta["RMS"],
-            "mel_spectogram":      mel.tolist(),
+            "mel_spectrogram":      mel.tolist(),
         }))
 
         with SnowflakeClient() as client:
@@ -250,7 +250,7 @@ def process_and_store_ingested_audio(
                         file_name, original_file_name, patient_id, pharmacie_id,
                         action, original_duration_s, stripped_duration_s, final_duration_s,
                         leading_silence_s, trailing_silence_s, sample_rate, n_samples,
-                        amplitude_max, rms, mel_spectogram
+                        amplitude_max, rms, mel_spectrogram
                     )
                     FROM (
                         SELECT
@@ -268,7 +268,7 @@ def process_and_store_ingested_audio(
                             $1:n_samples::INTEGER,
                             $1:amplitude_max::FLOAT,
                             $1:rms::FLOAT,
-                            $1:mel_spectogram
+                            $1:mel_spectrogram
                         FROM {row_stage_path}
                     )
                     FILE_FORMAT = (TYPE = 'JSON')

@@ -29,7 +29,7 @@ def create_table(client):
             n_samples              INTEGER,
             amplitude_max          FLOAT,
             rms                    FLOAT,
-            mel_spectogram         VARIANT,                   -- JSON with mel spectrogram data (128, T)
+            mel_spectrogram        VARIANT,                   -- JSON with mel spectrogram data (128, T)
             processed_at           TIMESTAMP_NTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP(),
             PRIMARY KEY (file_name),
             FOREIGN KEY (original_file_name) REFERENCES {DATABASE}.{SCHEMA}.INGESTED_SOUNDS_METADATA(file_name)
