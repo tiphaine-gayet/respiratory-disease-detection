@@ -353,8 +353,13 @@ def deploy_udf_process_file(session, udf_name: str = "PROCESS_FILE_UDF"):
         return y_trimmed, leading_s, trailing_s
 
     def load_audio_from_stage(file_path):
-        with SnowflakeFile.open(file_path, 'rb') as f:
-            audio_bytes = f.read()
+        # In Python UDF runtime, stage paths like @DB.SCHEMA.STAGE/path/file.wav
+        # are not scoped URLs. We explicitly allow non-scoped stage paths.
+        try:
+            with SnowflakeFile.open(file_path, 'rb', require_scoped_url=False) as f:
+                audio_bytes = f.read()
+        except Exception as stage_err:
+            raise RuntimeError(f"Unable to open stage file")
 
         sr, y = wavfile.read(io.BytesIO(audio_bytes))
 
