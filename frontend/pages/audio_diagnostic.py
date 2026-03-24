@@ -2,7 +2,8 @@ import streamlit as st
 import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
-from backend.router.predictions import load_pharmacies_for_select, upload_patient_audio_with_metadata
+from backend.router.predictions import load_pharmacies_for_select
+from backend.router.ingestion import upload_patient_audio_with_metadata
 
 # ── Path to reference audio files ──
 REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
