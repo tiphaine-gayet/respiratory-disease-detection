@@ -3,7 +3,6 @@ import os
 from components.audio import load_audio, preprocess_audio
 from components.charts import waveform_chart, mel_spectrogram
 
-
 # ── Path to reference audio files ──
 REF_AUDIO_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "assets", "ref_audio")
 
@@ -89,7 +88,6 @@ def render_diagnostic(is_doctor=False):
         unsafe_allow_html=True,
     )
 
-    # ── Main content area (full-width with padding via CSS) ──
     st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
 
     st.markdown(
@@ -116,6 +114,7 @@ def render_diagnostic(is_doctor=False):
         st.session_state["uploaded_audio"] = None
         st.session_state["audio_data"] = None
         st.session_state["audio_sr"] = None
+        st.session_state["analysis_sent"] = False
 
     if st.session_state["uploaded_audio"] is None:
         # Show uploader
@@ -142,6 +141,7 @@ def render_diagnostic(is_doctor=False):
             st.session_state["uploaded_audio"] = uploaded_file
             st.session_state["audio_data"] = audio
             st.session_state["audio_sr"] = sr
+            st.session_state["analysis_sent"] = False
             st.rerun()
     else:
 
@@ -153,251 +153,214 @@ def render_diagnostic(is_doctor=False):
             st.session_state["uploaded_audio"] = None
             st.session_state["audio_data"] = None
             st.session_state["audio_sr"] = None
+            st.session_state["analysis_sent"] = False
+            st.session_state["compare_class"] = None
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
         audio = st.session_state["audio_data"]
         sr = st.session_state["audio_sr"]
 
-        # ── Forme d'onde ──
-        st.markdown(
-            '<div class="p-section-label">FORME D\'ONDE</div>',
-            unsafe_allow_html=True,
-        )
-        st.pyplot(waveform_chart(audio, sr), use_container_width=True)
-
-        # ── Mel-Spectrogramme ──
-        st.markdown(
-            '<div class="p-section-label">MEL-SPECTROGRAMME</div>',
-            unsafe_allow_html=True,
-        )
-        st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
-
-        # TODO: Replace fake data with model predictions
-        # e.g. probas = model.predict(audio, sr)
-        probas = [
-            ("Asthme", 62, "asthma"),
-            ("BPCO", 18, "copd"),
-            ("Pneumonie", 10, "pneumo"),
-            ("Bronchite", 7, "bronchi"),
-            ("Sain", 3, "healthy"),
-        ]
-
-        # ── Init compare state ──
-        if "compare_class" not in st.session_state:
-            st.session_state["compare_class"] = None
-
-        # ── Probability card with inline compare buttons ──
-        with st.container():
+        if not st.session_state.get("analysis_sent", False):
+            if st.button("Envoyer →", use_container_width=True, key="send_analysis"):
+                st.session_state["analysis_sent"] = True
+                st.rerun()
+        else:
+            # ── Forme d'onde ──
             st.markdown(
-                """
-                <div class="p-result-card">
-                    <div class="p-result-title">Probabilités par classe</div>
-                </div>
-                """,
+                '<div class="p-section-label">FORME D\'ONDE</div>',
                 unsafe_allow_html=True,
             )
+            st.pyplot(waveform_chart(audio, sr), use_container_width=True)
 
-            st.markdown('<div class="proba-outer-card">', unsafe_allow_html=True)
+            # ── Mel-Spectrogramme ──
+            st.markdown(
+                '<div class="p-section-label">MEL-SPECTROGRAMME</div>',
+                unsafe_allow_html=True,
+            )
+            st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
 
-            for name, pct, cls in probas:
-                is_active = st.session_state["compare_class"] == cls
-                row_active_class = " is-active" if is_active else ""
+            # TODO: Replace fake data with model predictions
+            probas = [
+                ("Asthme", 62, "asthma"),
+                ("BPCO", 18, "copd"),
+                ("Pneumonie", 10, "pneumo"),
+                ("Bronchite", 7, "bronchi"),
+                ("Sain", 3, "healthy"),
+            ]
 
-                st.markdown(f'<div class="proba-row-inner{row_active_class}">', unsafe_allow_html=True)
+            # ── Probability card ──
+            if "compare_class" not in st.session_state:
+                st.session_state["compare_class"] = None
 
-                col_bar, col_btn = st.columns([8, 2], gap="small")
+            rows_html = ""
+            for i, (name, pct, cls) in enumerate(probas):
+                is_last = i == len(probas) - 1
+                border_bottom = "none" if is_last else "1px solid #D7E3DC"
 
-                with col_bar:
-                    st.markdown(
-                        f"""
-                        <div class="proba-row-interactive">
-                            <div class="proba-top">
-                                <span class="proba-name">{name}</span>
-                                <span class="proba-pct proba-{cls}">{pct}%</span>
-                            </div>
-                            <div class="proba-bar-track">
-                                <div class="proba-bar-fill bar-{cls}" style="width:{pct}%"></div>
-                            </div>
+                rows_html += f"""
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;
+                            border-bottom:{border_bottom};background:#fff;">
+                    <div style="flex:1;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                            <span style="font-size:14px;font-weight:500;color:#0C4B43;
+                                         font-family:Inter,sans-serif;">{name}</span>
+                            <span style="font-size:13px;font-weight:600;color:{_CLS_COLORS[cls]};
+                                         font-family:Inter,sans-serif;">{pct}%</span>
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                with col_btn:
-                    btn_label = "✕" if is_active else "Comparer"
-                    st.markdown('<div class="compare-btn-wrap">', unsafe_allow_html=True)
-                    if st.button(btn_label, key=f"cmp_{cls}", use_container_width=True):
-                        st.session_state["compare_class"] = None if is_active else cls
-                        st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-                st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Inline comparison panel ──
-        if st.session_state["compare_class"] is not None:
-            active_cls = st.session_state["compare_class"]
-            ref_key = _CLS_TO_REF[active_cls]
-            ref = REF_AUDIOS[ref_key]
-            cls_color = _CLS_COLORS[active_cls]
+                        <div style="height:7px;background:#E8EFEB;border-radius:999px;overflow:hidden;">
+                            <div style="height:7px;width:{pct}%;background:{_CLS_COLORS[cls]};
+                                        border-radius:999px;"></div>
+                        </div>
+                    </div>
+                </div>
+                """
 
             st.markdown(
                 f"""
-                <div class="compare-panel" style="border-color: {cls_color};">
-                    <div class="compare-panel-header" style="background: {cls_color}12;">
-                        <div>
-                            <span class="compare-panel-tag" style="background:{cls_color}; color:#fff;">
-                                Comparaison — {ref_key}
+                <div class="proba-card">
+                    <div class="proba-card-header">
+                        <span class="proba-card-title">Probabilités par classe</span>
+                    </div>
+                    {rows_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )         
+
+            # ── Compare dropdown ──
+            compare_options = ["—"] + [name for name, _, _ in probas]
+            cls_keys = [None] + [cls for _, _, cls in probas]
+            name_to_cls = {name: cls for name, _, cls in probas}
+
+            current_cls = st.session_state.get("compare_class")
+            current_name = "—"
+            for name, _, cls in probas:
+                if cls == current_cls:
+                    current_name = name
+                    break
+                
+            current_idx = compare_options.index(current_name)
+
+            def _on_compare_change():
+                sel = st.session_state.get("cmp_select", "—")
+                st.session_state["compare_class"] = name_to_cls.get(sel, None)
+
+            st.markdown(
+                '<div class="cmp-section-title">Comparer à un audio de référence</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown('<div class="cmp-select-wrap">', unsafe_allow_html=True)
+            st.selectbox(
+                "Comparer avec une référence",
+                options=compare_options,
+                index=current_idx,
+                key="cmp_select",
+                label_visibility="collapsed",
+                placeholder="⇄  Sélectionner une classe…",
+                on_change=_on_compare_change,
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # ── Inline comparison panel ──
+            if st.session_state["compare_class"] is not None:
+                active_cls = st.session_state["compare_class"]
+                ref_key = _CLS_TO_REF[active_cls]
+                ref = REF_AUDIOS[ref_key]
+                cls_color = _CLS_COLORS[active_cls]
+
+                st.markdown(
+                    f"""
+                    <div class="compare-panel" style="border-color: {cls_color};">
+                        <div class="compare-panel-header" style="background: {cls_color}12;">
+                            <div>
+                                <span class="compare-panel-tag" style="background:{cls_color}; color:#fff;">
+                                    Comparaison — {ref_key}
+                                </span>
+                                <span class="compare-panel-meta">{ref['meta']}</span>
+                            </div>
+                            <span class="compare-panel-sim">
+                                Similarité spectrale
+                                <strong>{ref['similarity']}%</strong>
                             </span>
-                            <span class="compare-panel-meta">{ref['meta']}</span>
                         </div>
-                        <span class="compare-panel-sim">
-                            Similarité spectrale
-                            <strong>{ref['similarity']}%</strong>
-                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
+
+                # ── Side-by-side waveforms ──
+                st.markdown(
+                    '<div class="compare-section-label">FORME D\'ONDE</div>',
+                    unsafe_allow_html=True,
+                )
+                cw_p, cw_r = st.columns(2)
+                with cw_p:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-patient">Patient</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.pyplot(waveform_chart(audio, sr), use_container_width=True)
+                with cw_r:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-ref">Référence</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.pyplot(waveform_chart(ref_audio, ref_sr), use_container_width=True)
+
+                # ── Side-by-side mel spectrograms ──
+                st.markdown(
+                    '<div class="compare-section-label">MEL-SPECTROGRAMME</div>',
+                    unsafe_allow_html=True,
+                )
+                cm_p, cm_r = st.columns(2)
+                with cm_p:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-patient">Patient</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
+                with cm_r:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-ref">Référence</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.pyplot(mel_spectrogram(ref_audio, ref_sr), use_container_width=True)
+
+                # Close comparison
+                st.markdown('<div class="compare-close-wrap">', unsafe_allow_html=True)
+                if st.button("✕  Fermer la comparaison", key="close_cmp", use_container_width=True):
+                    st.session_state["compare_class"] = None
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+               # TODO: Generate recommendation text dynamically from model output
+            st.markdown(
+                """
+                <div class="rec-card">
+                    <div class="rec-header">
+                        <div class="rec-icon-wrap">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        </div>
+                        <div class="rec-title">Recommandation d'action</div>
+                    </div>
+                    <div class="rec-body">
+                        Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
+                        Un suivi médical dans les <strong>48–72h</strong> est recommandé.
+                        En l'absence de symptômes aigus, une consultation de routine suffit.
+                        Si sibilances ou dyspnée aiguë : consultation urgente.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            # Load reference audio
-            ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
-
-            # ── Side-by-side waveforms ──
-            st.markdown(
-                '<div class="compare-section-label">FORME D\'ONDE</div>',
-                unsafe_allow_html=True,
-            )
-            cw_p, cw_r = st.columns(2)
-            with cw_p:
-                st.markdown(
-                    '<div class="compare-col-tag tag-patient">Patient</div>',
-                    unsafe_allow_html=True,
-                )
-                st.pyplot(waveform_chart(audio, sr), use_container_width=True)
-            with cw_r:
-                st.markdown(
-                    '<div class="compare-col-tag tag-ref">Référence</div>',
-                    unsafe_allow_html=True,
-                )
-                st.pyplot(waveform_chart(ref_audio, ref_sr), use_container_width=True)
-
-            # ── Side-by-side mel spectrograms ──
-            st.markdown(
-                '<div class="compare-section-label">MEL-SPECTROGRAMME</div>',
-                unsafe_allow_html=True,
-            )
-            cm_p, cm_r = st.columns(2)
-            with cm_p:
-                st.markdown(
-                    '<div class="compare-col-tag tag-patient">Patient</div>',
-                    unsafe_allow_html=True,
-                )
-                st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
-            with cm_r:
-                st.markdown(
-                    '<div class="compare-col-tag tag-ref">Référence</div>',
-                    unsafe_allow_html=True,
-                )
-                st.pyplot(mel_spectrogram(ref_audio, ref_sr), use_container_width=True)
-
-            # ── Side-by-side probabilities ──
-            st.markdown(
-                '<div class="compare-section-label">PROBABILITÉS COMPARÉES</div>',
-                unsafe_allow_html=True,
-            )
-            cp_p, cp_r = st.columns(2)
-            with cp_p:
-                st.markdown(
-                    '<div class="compare-col-tag tag-patient">Patient</div>',
-                    unsafe_allow_html=True,
-                )
-                patient_rows = ""
-                for pname, ppct, pcls in probas:
-                    patient_rows += f"""
-                    <div class="cmp-proba-row">
-                        <span class="cmp-proba-name">{pname}</span>
-                        <span class="cmp-proba-pct proba-{pcls}">{ppct}%</span>
-                        <div class="proba-bar-track" style="margin-top:4px;">
-                            <div class="proba-bar-fill bar-{pcls}" style="width:{ppct}%"></div>
-                        </div>
-                    </div>"""
-                st.markdown(
-                    f'<div class="cmp-proba-card">{patient_rows}</div>',
-                    unsafe_allow_html=True,
-                )
-
-            with cp_r:
-                st.markdown(
-                    '<div class="compare-col-tag tag-ref">Référence</div>',
-                    unsafe_allow_html=True,
-                )
-                ref_rows = ""
-                for rname, rpct, rcls in ref["probas"]:
-                    ref_rows += f"""
-                    <div class="cmp-proba-row">
-                        <span class="cmp-proba-name">{rname}</span>
-                        <span class="cmp-proba-pct proba-{rcls}">{rpct}%</span>
-                        <div class="proba-bar-track" style="margin-top:4px;">
-                            <div class="proba-bar-fill bar-{rcls}" style="width:{rpct}%"></div>
-                        </div>
-                    </div>"""
-                st.markdown(
-                    f'<div class="cmp-proba-card">{ref_rows}</div>',
-                    unsafe_allow_html=True,
-                )
-
-            # Close comparison button at bottom
-            st.markdown('<div class="compare-close-wrap">', unsafe_allow_html=True)
-            if st.button("✕  Fermer la comparaison", key="close_cmp", use_container_width=True):
-                st.session_state["compare_class"] = None
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Recommandation ──
-        # TODO: Generate recommendation text dynamically from model output
-        st.markdown(
-            """
-            <div class="rec-card">
-                <div class="rec-header">
-                    <div class="rec-icon-wrap">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    </div>
-                    <div class="rec-title">Recommandation d'action</div>
-                </div>
-                <div class="rec-body">
-                    Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
-                    Un suivi médical dans les <strong>48–72h</strong> est recommandé.
-                    En l'absence de symptômes aigus, une consultation de routine suffit.
-                    Si sibilances ou dyspnée aiguë : consultation urgente.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        if st.button("Envoyer au médecin →", use_container_width=True, key="analyze"):
-            st.success("Analyse envoyée au médecin ✔️")
-
     st.markdown("</div>", unsafe_allow_html=True)
+    
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CSS — Tessan brand system
-#
-# Brand palette (from tessan.io):
-#   Deep navy   #1A2B4A  — primary background, trust & authority
-#   Coral       #E8714A  — accent / CTA, warmth & approachability
-#   Slate       #64748B  — secondary text
-#   White       #FFFFFF  — headings on dark, card bg in doctor view
-#   Off-white   #F7F8FA  — doctor-side page bg
-#
-# Typography:
-#   Poppins     — headlines & body (matches Tessan's rounded modern sans)
-#   JetBrains Mono — data values, labels, badges
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _PATIENT_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
@@ -712,139 +675,63 @@ footer { display: none !important; }
     font-weight: 700;
 }
 
-/* ━━ Probability section shell ━━ */
-.p-result-card {
-    background: var(--card);
+/* ━━━━ Probability card (single markdown block) ━━━━ */
+.proba-card {
+    background: #fff;
     border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 18px 20px;
+    border-radius: 20px 20px 20px 20px;
+    overflow: hidden;
     box-shadow: 0 4px 14px rgba(12, 75, 67, 0.03);
-    margin-bottom: 10px;
 }
 
-.p-result-title {
+.proba-card-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.proba-card-title {
     font-size: 11px;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.10em;
-    margin: 0;
     font-family: var(--font-body);
 }
 
-/* ━━ Single outer probability card ━━ */
-.proba-outer-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 8px 14px;
-    box-shadow: 0 4px 14px rgba(12, 75, 67, 0.03);
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-/* ━━ Individual row inside the outer card ━━ */
-.proba-row-inner {
-    padding: 12px 4px;
-    border-bottom: 1px solid var(--border);
-    background: transparent;
-}
-
-.proba-row-inner:last-child {
-    border-bottom: none;
-}
-
-.proba-row-inner.is-active {
-    background: transparent;
-}
-
-.proba-row-interactive {
-    padding: 4px 2px 2px;
-    border-radius: 10px;
-    border-left: 3px solid transparent;
-    transition: background 0.15s ease;
-}
-
-.proba-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 8px;
-}
-
-.proba-name {
+/* ━━ Compare section title ━━ */
+.cmp-section-title {
+    font-family: var(--font-body);
     font-size: 14px;
-    font-weight: 500;
-    color: var(--text-main);
-    font-family: var(--font-body);
-}
-
-.proba-pct {
-    font-size: 13px;
     font-weight: 600;
-    font-family: var(--font-body);
+    color: var(--text-main);
+    margin-top: 20px;
+    margin-bottom: 6px;
 }
 
-.proba-bar-track {
-    height: 7px;
-    background: #E8EFEB;
-    border-radius: 999px;
-    overflow: hidden;
+/* ━━ Compare selectbox ━━ */
+.cmp-select-wrap {
+    margin-top: -4px;
+    margin-bottom: 10px;
 }
 
-.proba-bar-fill {
-    height: 7px;
-    border-radius: 999px;
-    transition: width 0.6s ease;
-}
-
-.proba-asthma  { color: var(--c-asthma);  }
-.proba-copd    { color: var(--c-copd);    }
-.proba-pneumo  { color: var(--c-pneumo);  }
-.proba-bronchi { color: var(--c-bronchi); }
-.proba-healthy { color: var(--c-healthy); }
-
-.bar-asthma  { background: var(--c-asthma);  }
-.bar-copd    { background: var(--c-copd);    }
-.bar-pneumo  { background: var(--c-pneumo);  }
-.bar-bronchi { background: var(--c-bronchi); }
-.bar-healthy { background: var(--c-healthy); }
-
-/* ━━ Compare button inside row card ━━ */
-.compare-btn-wrap {
-    display: flex;
-    align-items: center;
-    justify-content: stretch;
-    height: 100%;
-}
-
-.compare-btn-wrap .stButton {
-    width: 100% !important;
-}
-
-.compare-btn-wrap .stButton > button {
-    width: 100% !important;
-    min-height: 44px !important;
-    padding: 10px 14px !important;
-    background: var(--yellow) !important;
-    border: 1px solid transparent !important;
-    border-radius: 10px !important;
-    color: var(--green) !important;
+.cmp-select-wrap [data-testid="stSelectbox"] > div > div {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
     font-family: var(--font-body) !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    box-shadow: none !important;
+    font-size: 13px !important;
+    color: var(--text-main) !important;
+    padding: 2px 4px !important;
+    cursor: pointer !important;
+    transition: border-color 0.2s ease !important;
 }
 
-.compare-btn-wrap .stButton > button:hover,
-.compare-btn-wrap .stButton > button:focus,
-.compare-btn-wrap .stButton > button:active {
-    background: var(--yellow-dark) !important;
+.cmp-select-wrap [data-testid="stSelectbox"] > div > div:hover {
+    border-color: var(--green) !important;
+}
+
+.cmp-select-wrap [data-testid="stSelectbox"] svg {
     color: var(--green) !important;
-    border-color: transparent !important;
-    box-shadow: none !important;
-    outline: none !important;
 }
 
 /* ━━ Comparison panel ━━ */
@@ -961,6 +848,13 @@ footer { display: none !important; }
     height: 5px;
 }
 
+/* Color classes for proba bars */
+.proba-asthma, .bar-asthma { color: var(--c-asthma); background: var(--c-asthma); }
+.proba-copd, .bar-copd { color: var(--c-copd); background: var(--c-copd); }
+.proba-pneumo, .bar-pneumo { color: var(--c-pneumo); background: var(--c-pneumo); }
+.proba-bronchi, .bar-bronchi { color: var(--c-bronchi); background: var(--c-bronchi); }
+.proba-healthy, .bar-healthy { color: var(--c-healthy); background: var(--c-healthy); }
+
 /* ━━ Close comparison button ━━ */
 .compare-close-wrap {
     margin-top: 4px;
@@ -1069,4 +963,3 @@ footer { display: none !important; }
 }
 </style>
 """
-
