@@ -1,4 +1,4 @@
-.PHONY: help venv download_dataset raw app ingested infra
+.PHONY: help venv download_dataset raw app ingested infra streamilit
 
 help:
 	@echo "📋 Asthma Detection Dataset - Snowflake Commands"
@@ -13,6 +13,8 @@ help:
 	@echo "  make app               - Set up predictions table and load data used in app (pharmacies in France) into Snowflake"
 	@echo "  make ingested          - Create INGESTED schema (ingested audio files, extracted features, and metadata)"
 	@echo ""
+	@echo "Run Streamlit app:"
+	@echo "  make streamlit          - Start the Streamlit app"
 
 venv:
 	python3.11 -m venv venv
@@ -59,3 +61,7 @@ infra:
 	@make raw
 	@make ingested
 	@make app
+
+streamlit:
+	@echo "🚀 Starting Streamlit app..."
+	@streamlit run frontend/app.py
