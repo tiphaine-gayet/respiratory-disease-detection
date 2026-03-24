@@ -1,4 +1,4 @@
-.PHONY: help venv download_dataset raw app ingested infra streamilit
+.PHONY: help venv download_dataset raw app ingested infra streamlit
 
 help:
 	@echo "📋 Asthma Detection Dataset - Snowflake Commands"

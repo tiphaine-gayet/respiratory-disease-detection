@@ -27,7 +27,7 @@ DISEASES: dict[str, dict] = {
     "asthma":    {"label": "Asthme",    "col": "pct_asthma",    "rgb": [217, 92,  79]},
     "copd":      {"label": "BPCO",      "col": "pct_copd",      "rgb": [216, 166, 61]},
     "bronchial": {"label": "Bronchite", "col": "pct_bronchial", "rgb": [91,  141, 239]},
-    "pneumonia": {"label": "Pneumonie", "col": "pct_pneumonia", "rgb": [88,  168, 137]},
+    "pneumonia": {"label": "Pneumonie", "col": "pct_pneumonia", "rgb": [139, 92,  246]},
 }
 
 _DISEASE_COLS = [d["col"] for d in DISEASES.values()]
@@ -36,12 +36,6 @@ _ACTION_LABELS = {
     "RAS":       "RAS",
     "SUIVI_48H": "Suivi 48 h",
     "URGENCE":   "Urgence",
-}
-
-_ACTION_COLORS = {
-    "RAS":       "#9AA8A5",
-    "SUIVI_48H": "#D8A63D",
-    "URGENCE":   "#D95C4F",
 }
 
 
@@ -346,10 +340,10 @@ def render_dashboard() -> None:
             unsafe_allow_html=True,
         )
     else:
-        df_table = df_table.copy()
+        df_table = df_table.copy().reset_index(drop=True)
         df_table["dominant"] = df_table.apply(_dominant, axis=1)
         df_table["Pré-diagnostic"] = df_table.apply(
-            lambda r: "Sain"
+            lambda r: f"Sain ({r['pct_healthy'] * 100:.0f} %)"
             if r["dominant"] == "healthy"
             else (
                 f"{DISEASES[r['dominant']]['label']} "
@@ -358,30 +352,61 @@ def render_dashboard() -> None:
             axis=1,
         )
 
-        # Badge HTML pour l'action
-        def _action_badge(action: str) -> str:
-            label = _ACTION_LABELS.get(action, action)
-            color = _ACTION_COLORS.get(action, "#9AA8A5")
-            return (
-                f'<span style="'
-                f'background:{color}22;color:{color};'
-                f'border:1px solid {color}55;'
-                f'border-radius:6px;padding:2px 8px;'
-                f'font-size:12px;font-weight:600;">'
-                f'{label}</span>'
-            )
-
         display = pd.DataFrame({
             "Date":           pd.to_datetime(df_table["predicted_at"]).dt.strftime("%d/%m/%Y %H:%M"),
             "Patient (NSS)":  df_table["patient_id"].astype(str).str[:7] + "••••••••",
             "Pharmacie":      df_table["pharmacie_nom"].fillna("—"),
             "Commune":        df_table["commune"].fillna("—"),
+            "Code postal":    df_table["code_postal"].fillna("—"),
             "Pré-diagnostic": df_table["Pré-diagnostic"],
             "Confiance IA":   (df_table["pct_confiance"] * 100).round(1).astype(str) + " %",
             "Action":         df_table["action"].map(_ACTION_LABELS).fillna(df_table["action"]),
         })
 
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        _diag_hex = {k: "#{:02X}{:02X}{:02X}".format(*v["rgb"]) for k, v in DISEASES.items()}
+        _diag_hex["healthy"] = "#1D9E75"
+        _action_colors_map = {
+            _ACTION_LABELS["URGENCE"]:   "#D95C4F",
+            _ACTION_LABELS["SUIVI_48H"]: "#D8A63D",
+            _ACTION_LABELS["RAS"]:       "#9AA8A5",
+        }
+
+        def _badge(text: str, color: str) -> str:
+            return (
+                f'<span style="background:{color}22;color:{color};'
+                f'border:1px solid {color}55;border-radius:6px;'
+                f'padding:2px 8px;font-size:12px;font-weight:600;'
+                f'white-space:nowrap;">{text}</span>'
+            )
+
+        rows = []
+        for i in display.index:
+            dom         = df_table.at[i, "dominant"]
+            diag_color  = _diag_hex.get(dom, "#9AA8A5")
+            action_val  = display.at[i, "Action"]
+            action_color = _action_colors_map.get(action_val, "#9AA8A5")
+            row_bg      = "background:rgba(217,92,79,0.06);" if action_val == _ACTION_LABELS["URGENCE"] else ""
+            diag_cell   = display.at[i, "Pré-diagnostic"] if dom == "healthy" else _badge(display.at[i, "Pré-diagnostic"], diag_color)
+            rows.append(
+                f'<tr style="{row_bg}">'
+                f'<td style="color:var(--text-soft);font-size:12px;">{display.at[i,"Date"]}</td>'
+                f'<td style="font-family:monospace;font-size:12px;">{display.at[i,"Patient (NSS)"]}</td>'
+                f'<td>{display.at[i,"Pharmacie"]}</td>'
+                f'<td style="color:var(--text-muted);">{display.at[i,"Commune"]}</td>'
+                f'<td>{diag_cell}</td>'
+                f'<td style="text-align:right;">{display.at[i,"Confiance IA"]}</td>'
+                f'<td>{_badge(action_val, action_color)}</td>'
+                f'</tr>'
+            )
+
+        _headers = ["Date", "Patient (NSS)", "Pharmacie", "Commune", "Pré-diagnostic", "Confiance IA", "Action"]
+        thead = "".join(f"<th>{h}</th>" for h in _headers)
+        st.markdown(
+            f'<div style="overflow-x:auto;">'
+            f'<table class="pred-table"><thead><tr>{thead}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -515,6 +540,43 @@ _DASHBOARD_CSS = """
     border-radius: 14px !important;
     overflow: hidden;
     margin-top: 4px;
+}
+
+/* ━━ Predictions table ━━ */
+.pred-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-main);
+}
+
+.pred-table thead tr {
+    border-bottom: 1px solid var(--border);
+}
+
+.pred-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.pred-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.pred-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.pred-table tbody tr:hover td {
+    background: rgba(0,0,0,0.02);
 }
 </style>
 """
