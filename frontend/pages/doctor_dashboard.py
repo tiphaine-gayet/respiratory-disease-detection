@@ -33,9 +33,11 @@ DISEASES: dict[str, dict] = {
 _DISEASE_COLS = [d["col"] for d in DISEASES.values()]
 
 _ACTION_LABELS = {
-    "RAS":       "RAS",
-    "SUIVI_48H": "Suivi 48 h",
-    "URGENCE":   "Urgence",
+    "RAS":               "RAS",
+    "surveillance_7j":   "Suivi 7j",
+    "surveillance_48h":  "Suivi 48h",
+    "consultation_24h":  "Consultation 24h",
+    "urgent_6h":         "Urgent 6h",
 }
 
 # Dedicated map color for the "all diseases" view (distinct from class colors).
@@ -326,8 +328,8 @@ def render_dashboard() -> None:
         )
 
         total     = len(df)
-        urgents   = int((df["action"] == "URGENCE").sum())   if not df.empty else 0
-        confiance = float(df["pct_confiance"].mean() * 100)  if not df.empty else 0.0
+        urgents   = int((df["action"] == "urgent_6h").sum())  if not df.empty else 0
+        confiance = float(df["pct_confiance"].mean())         if not df.empty else 0.0
         ph_count  = int(df["pharmacie_id"].nunique())         if not df.empty else 0
 
         st.markdown(
@@ -341,7 +343,7 @@ def render_dashboard() -> None:
                 <div class="dash-metric">
                     <div class="dash-metric-label">Cas urgents</div>
                     <div class="dash-metric-value" style="color:#D95C4F;">{urgents}</div>
-                    <div class="dash-metric-sub">Action = Urgence</div>
+                    <div class="dash-metric-sub">Action = Urgent 6h</div>
                 </div>
                 <div class="dash-metric">
                     <div class="dash-metric-label">Confiance IA</div>
@@ -404,12 +406,9 @@ def render_dashboard() -> None:
         df_table = df_table.copy().reset_index(drop=True)
         df_table["dominant"] = df_table.apply(_dominant, axis=1)
         df_table["Pré-diagnostic"] = df_table.apply(
-            lambda r: f"Sain ({r['pct_healthy'] * 100:.0f} %)"
+            lambda r: "Sain"
             if r["dominant"] == "healthy"
-            else (
-                f"{DISEASES[r['dominant']]['label']} "
-                f"({r[DISEASES[r['dominant']]['col']] * 100:.0f} %)"
-            ),
+            else DISEASES[r["dominant"]]["label"],
             axis=1,
         )
 
@@ -420,16 +419,18 @@ def render_dashboard() -> None:
             "Commune":        df_table["commune"].fillna("—"),
             "Code postal":    df_table["code_postal"].fillna("—"),
             "Pré-diagnostic": df_table["Pré-diagnostic"],
-            "Confiance IA":   (df_table["pct_confiance"] * 100).round(1).astype(str) + " %",
+            "Confiance IA":   df_table["pct_confiance"].round(1).astype(str) + " %",
             "Action":         df_table["action"].map(_ACTION_LABELS).fillna(df_table["action"]),
         })
 
         _diag_hex = {k: "#{:02X}{:02X}{:02X}".format(*v["rgb"]) for k, v in DISEASES.items()}
         _diag_hex["healthy"] = "#1D9E75"
         _action_colors_map = {
-            _ACTION_LABELS["URGENCE"]:   "#D95C4F",
-            _ACTION_LABELS["SUIVI_48H"]: "#D8A63D",
-            _ACTION_LABELS["RAS"]:       "#9AA8A5",
+            _ACTION_LABELS["urgent_6h"]:        "#D95C4F",
+            _ACTION_LABELS["consultation_24h"]: "#E07040",
+            _ACTION_LABELS["surveillance_48h"]: "#D8A63D",
+            _ACTION_LABELS["surveillance_7j"]:  "#7EB89A",
+            _ACTION_LABELS["RAS"]:              "#9AA8A5",
         }
 
         def _badge(text: str, color: str) -> str:
@@ -446,8 +447,8 @@ def render_dashboard() -> None:
             diag_color  = _diag_hex.get(dom, "#9AA8A5")
             action_val  = display.at[i, "Action"]
             action_color = _action_colors_map.get(action_val, "#9AA8A5")
-            row_bg      = "background:rgba(217,92,79,0.06);" if action_val == _ACTION_LABELS["URGENCE"] else ""
-            diag_cell   = display.at[i, "Pré-diagnostic"] if dom == "healthy" else _badge(display.at[i, "Pré-diagnostic"], diag_color)
+            row_bg      = "background:rgba(217,92,79,0.06);" if action_val == _ACTION_LABELS["urgent_6h"] else ""
+            diag_cell   = _badge(display.at[i, "Pré-diagnostic"], diag_color)
             rows.append(
                 f'<tr style="{row_bg}">'
                 f'<td style="color:var(--text-soft);font-size:12px;">{display.at[i,"Date"]}</td>'

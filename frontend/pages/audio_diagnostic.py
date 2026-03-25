@@ -76,6 +76,14 @@ def _load_ref_audio(audio_file):
     return audio, sr_
 
 
+@st.cache_data
+def _load_ref_audio_bytes(audio_file):
+    """Return raw bytes of a reference audio file (cached)."""
+    path = os.path.join(REF_AUDIO_DIR, audio_file)
+    with open(path, "rb") as f:
+        return f.read()
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_pharmacies_options():
     return load_pharmacies_for_select()
@@ -368,6 +376,26 @@ def render_diagnostic(is_doctor=False):
                 )
 
                 ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
+
+                # ── Side-by-side audio players ──
+                st.markdown(
+                    '<div class="compare-section-label">ÉCOUTE</div>',
+                    unsafe_allow_html=True,
+                )
+                ca_p, ca_r = st.columns(2)
+                with ca_p:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-patient">Patient</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.session_state["uploaded_audio"].seek(0)
+                    st.audio(st.session_state["uploaded_audio"])
+                with ca_r:
+                    st.markdown(
+                        '<div class="compare-col-tag tag-ref">Référence</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.audio(_load_ref_audio_bytes(ref["audio_file"]))
 
                 # ── Side-by-side waveforms ──
                 st.markdown(
