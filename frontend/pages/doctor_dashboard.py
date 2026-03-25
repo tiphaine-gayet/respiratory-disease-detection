@@ -173,7 +173,7 @@ def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.Dat
 
 # ── Rendu de la carte ─────────────────────────────────────────────────────────
 
-def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_ids: list[str]) -> None:
+def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_ids: list[str], focus: dict | None = None) -> None:
     map_df = _agg_for_map(df, disease_key, granularity)
 
     if map_df.empty:
@@ -222,13 +222,17 @@ def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_i
                 )
             )
 
+    view_lat  = focus["lat"]  if focus else 46.8
+    view_lon  = focus["lon"]  if focus else 2.35
+    view_zoom = focus["zoom"] if focus else 5
+
     st.pydeck_chart(
         pdk.Deck(
             layers=layers,
             initial_view_state=pdk.ViewState(
-                latitude=46.8,
-                longitude=2.35,
-                zoom=5,
+                latitude=view_lat,
+                longitude=view_lon,
+                zoom=view_zoom,
                 pitch=0,
             ),
             map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
@@ -271,6 +275,9 @@ def render_dashboard() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+    if "map_focus" not in st.session_state:
+        st.session_state["map_focus"] = None
 
     today            = date.today()
     first_this_month = today.replace(day=1)
@@ -368,19 +375,25 @@ def render_dashboard() -> None:
             '<div class="doc-card-title">Carte des pré-diagnostics respiratoires</div>',
             unsafe_allow_html=True,
         )
+        focus = st.session_state["map_focus"]
+        if focus:
+            if st.button("⊙ Réinitialiser la vue", key="reset_map_focus"):
+                st.session_state["map_focus"] = None
+                st.rerun()
+
         tab_all, tab_asthma, tab_copd, tab_bronchial, tab_pneumonia = st.tabs(
             ["🗺 Toutes maladies", "Asthme", "BPCO", "Bronchite", "Pneumonie"]
         )
         with tab_all:
-            _render_map(df, "all", granularity, selected_ids)
+            _render_map(df, "all", granularity, selected_ids, focus)
         with tab_asthma:
-            _render_map(df, "asthma", granularity, selected_ids)
+            _render_map(df, "asthma", granularity, selected_ids, focus)
         with tab_copd:
-            _render_map(df, "copd", granularity, selected_ids)
+            _render_map(df, "copd", granularity, selected_ids, focus)
         with tab_bronchial:
-            _render_map(df, "bronchial", granularity, selected_ids)
+            _render_map(df, "bronchial", granularity, selected_ids, focus)
         with tab_pneumonia:
-            _render_map(df, "pneumonia", granularity, selected_ids)
+            _render_map(df, "pneumonia", granularity, selected_ids, focus)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Tableau pré-diagnostics ───────────────────────────────────────────
@@ -392,7 +405,7 @@ def render_dashboard() -> None:
         filter_suffix = f" — {', '.join(names)}"
 
     st.markdown(
-        f'<div class="doc-card" style="margin-top:16px;">'
+        f'<div class="doc-card pred-table-wrap" style="margin-top:16px;">'
         f'<div class="doc-card-title">Pré-diagnostics patients{filter_suffix}</div>',
         unsafe_allow_html=True,
     )
@@ -441,34 +454,46 @@ def render_dashboard() -> None:
                 f'white-space:nowrap;">{text}</span>'
             )
 
-        rows = []
-        for i in display.index:
-            dom         = df_table.at[i, "dominant"]
-            diag_color  = _diag_hex.get(dom, "#9AA8A5")
-            action_val  = display.at[i, "Action"]
-            action_color = _action_colors_map.get(action_val, "#9AA8A5")
-            row_bg      = "background:rgba(217,92,79,0.06);" if action_val == _ACTION_LABELS["urgent_6h"] else ""
-            diag_cell   = _badge(display.at[i, "Pré-diagnostic"], diag_color)
-            rows.append(
-                f'<tr style="{row_bg}">'
-                f'<td style="color:var(--text-soft);font-size:12px;">{display.at[i,"Date"]}</td>'
-                f'<td style="font-family:monospace;font-size:12px;">{display.at[i,"Patient (NSS)"]}</td>'
-                f'<td>{display.at[i,"Pharmacie"]}</td>'
-                f'<td style="color:var(--text-muted);">{display.at[i,"Commune"]}</td>'
-                f'<td>{diag_cell}</td>'
-                f'<td style="text-align:right;">{display.at[i,"Confiance IA"]}</td>'
-                f'<td>{_badge(action_val, action_color)}</td>'
-                f'</tr>'
-            )
-
-        _headers = ["Date", "Patient (NSS)", "Pharmacie", "Commune", "Pré-diagnostic", "Confiance IA", "Action"]
-        thead = "".join(f"<th>{h}</th>" for h in _headers)
-        st.markdown(
-            f'<div style="overflow-x:auto;">'
-            f'<table class="pred-table"><thead><tr>{thead}</tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table></div>',
-            unsafe_allow_html=True,
+        _COL_W = [1.8, 1.8, 2.2, 1.5, 2, 1.1, 2, 0.45]
+        _th = lambda t: (
+            f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.08em;color:var(--text-muted);padding:6px 4px 10px;'
+            f'border-bottom:2px solid var(--border);font-family:var(--font-body);">{t}</div>'
         )
+        _td = lambda t, extra="": (
+            f'<div style="font-size:13px;padding:9px 4px;font-family:var(--font-body);{extra}">{t}</div>'
+        )
+
+        hcols = st.columns(_COL_W)
+        for col, h in zip(hcols, ["Date", "Patient (NSS)", "Pharmacie", "Commune",
+                                    "Pré-diagnostic", "Confiance", "Action", ""]):
+            col.markdown(_th(h), unsafe_allow_html=True)
+
+        for i in display.index:
+            dom          = df_table.at[i, "dominant"]
+            diag_color   = _diag_hex.get(dom, "#9AA8A5")
+            action_val   = display.at[i, "Action"]
+            action_color = _action_colors_map.get(action_val, "#9AA8A5")
+
+            rcols = st.columns(_COL_W)
+            rcols[0].markdown(_td(display.at[i, "Date"],         "color:var(--text-soft);font-size:12px;"), unsafe_allow_html=True)
+            rcols[1].markdown(_td(display.at[i, "Patient (NSS)"],"font-family:monospace;font-size:12px;"), unsafe_allow_html=True)
+            rcols[2].markdown(_td(display.at[i, "Pharmacie"]),    unsafe_allow_html=True)
+            rcols[3].markdown(_td(display.at[i, "Commune"],      "color:var(--text-muted);"),              unsafe_allow_html=True)
+            rcols[4].markdown(_badge(display.at[i, "Pré-diagnostic"], diag_color),                         unsafe_allow_html=True)
+            rcols[5].markdown(_td(display.at[i, "Confiance IA"], "text-align:right;"),                     unsafe_allow_html=True)
+            rcols[6].markdown(_badge(action_val, action_color),                                             unsafe_allow_html=True)
+            with rcols[7]:
+                if st.button("📍", key=f"zoom_{i}", help="Zoomer sur la carte"):
+                    lat = df_table.iloc[i]["loc_lat"]
+                    lon = df_table.iloc[i]["loc_long"]
+                    if pd.notna(lat) and pd.notna(lon):
+                        st.session_state["map_focus"] = {
+                            "lat": float(lat), "lon": float(lon), "zoom": 14,
+                        }
+                        st.rerun()
+                    else:
+                        st.caption("Pas de coordonnées.")
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -698,41 +723,33 @@ _DASHBOARD_CSS = """
     display: inline-block;
 }
 
-/* ━━ Predictions table ━━ */
-.pred-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--text-main);
-}
+/* ━━ Predictions table (columns-based) ━━ */
 
-.pred-table thead tr {
+/* Remove Streamlit's default gap & padding from column rows in the table area */
+.pred-table-wrap [data-testid="stHorizontalBlock"] {
+    gap: 0 !important;
     border-bottom: 1px solid var(--border);
+    padding: 0 !important;
+    align-items: center;
 }
-
-.pred-table th {
-    text-align: left;
-    padding: 8px 12px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-}
-
-.pred-table td {
-    padding: 9px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-}
-
-.pred-table tbody tr:last-child td {
+.pred-table-wrap [data-testid="stHorizontalBlock"]:last-child {
     border-bottom: none;
 }
-
-.pred-table tbody tr:hover td {
-    background: rgba(0,0,0,0.02);
+.pred-table-wrap [data-testid="stHorizontalBlock"]:hover {
+    background: rgba(0,0,0,0.015);
+}
+/* Shrink the pin button to be unobtrusive */
+.pred-table-wrap button[kind="secondary"] {
+    padding: 2px 6px !important;
+    font-size: 14px !important;
+    min-height: unset !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+}
+.pred-table-wrap button[kind="secondary"]:hover {
+    color: var(--green) !important;
+    background: transparent !important;
 }
 
 /* ━━ Mobile ━━ */
