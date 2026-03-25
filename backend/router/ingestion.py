@@ -188,10 +188,10 @@ def upload_patient_audio_with_metadata(
         pharmacie_id=pharmacie_id,
         audio_bytes=audio_bytes,
     )
-    run_inference_and_store(
+    inference_result = run_inference_and_store(
         mel_npy_filename=mel_npy_filename,
         patient_id=patient_id,
         pharmacie_id=pharmacie_id,
         audio_file_name=stage_file_name,
     )
-    return stage_file_name, metadata
+    return stage_file_name, metadata, inference_result

@@ -56,8 +56,14 @@ with header_col2:
             st.caption(f"**{st.session_state.user_full_name}** ({role_text})")
         with nav_col2:
             if st.session_state.is_doctor:
-                if st.button("🎤 Diagnostic audio", key="nav_diagnostic"):
-                    st.session_state.current_page = "audio_diagnostic"
+                if st.session_state.current_page == "audio_diagnostic":
+                    if st.button("📊 Dashboard", key="nav_dashboard"):
+                        st.session_state.current_page = None
+                        st.rerun()
+                else:
+                    if st.button("🎤 Diagnostic audio", key="nav_diagnostic"):
+                        st.session_state.current_page = "audio_diagnostic"
+                        st.rerun()
 
 with header_col3:
     if st.session_state.authenticated:

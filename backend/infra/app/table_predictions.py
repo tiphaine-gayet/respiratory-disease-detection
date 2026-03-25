@@ -12,7 +12,7 @@ SCHEMA = os.getenv("SNOWFLAKE_SCHEMA_APP")
 TABLE = "PREDICTIONS"
 
 # Clinical action thresholds are enforced at app level; only valid labels stored here.
-# VALID_ACTIONS = ("RAS", "SUIVI_48H", "URGENCE")
+# VALID_ACTIONS = ("RAS", "surveillance_7j", "surveillance_48h", "consultation_24h", "urgent_6h")
 
 def create_table(client):
     client.execute(f"""

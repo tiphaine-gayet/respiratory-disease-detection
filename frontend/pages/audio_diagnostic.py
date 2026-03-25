@@ -76,6 +76,14 @@ def _load_ref_audio(audio_file):
     return audio, sr_
 
 
+@st.cache_data
+def _load_ref_audio_bytes(audio_file):
+    """Return raw bytes of a reference audio file (cached)."""
+    path = os.path.join(REF_AUDIO_DIR, audio_file)
+    with open(path, "rb") as f:
+        return f.read()
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_pharmacies_options():
     return load_pharmacies_for_select()
@@ -84,18 +92,7 @@ def _load_pharmacies_options():
 def render_diagnostic(is_doctor=False):
     st.markdown(_PATIENT_CSS, unsafe_allow_html=True)
 
-    # Logo + tagline
-    st.markdown(
-        """
-        <div class="p-logo-wrap">
-            <div class="p-logo">TESS<span>AN</span></div>
-            <div class="p-tagline">CABINET MÉDICAL CONNECTÉ · ANALYSE RESPIRATOIRE</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # ── Pharmacy selection (used to attach pharmacy_id to the test context) ──
+    # ── Load pharmacy data & init state before any rendering ──
     pharmacies_df = _load_pharmacies_options()
     pharmacy_options = [""]
     pharmacy_labels = {"": "Sélectionner votre pharmacie"}
@@ -108,331 +105,295 @@ def render_diagnostic(is_doctor=False):
     if "selected_pharmacy_id" not in st.session_state:
         st.session_state["selected_pharmacy_id"] = ""
 
-    st.selectbox(
-        "Pharmacie du test",
-        options=pharmacy_options,
-        format_func=lambda pid: pharmacy_labels.get(pid, pid),
-        key="selected_pharmacy_id",
-        help="Sélectionnez la pharmacie où le test a été effectué.",
-    )
-    
-    # DEBUG: Print pharmacy ID
-    print(f"🔍 Pharmacy ID selected: {st.session_state.get('selected_pharmacy_id', 'NONE')}")
-
-    st.markdown('<div class="p-content-wrap">', unsafe_allow_html=True)
-
-    st.markdown(
-        """
-        <div class="p-card-header">
-            <div class="p-icon-row">
-                <div class="p-header-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v4l3 3"/></svg>
-                </div>
-                <span class="p-header-badge">Analyse IA</span>
-            </div>
-            <div class="p-title">Analyse respiratoire</div>
-            <div class="p-subtitle">
-                Déposez ou enregistrez votre respiration. Notre IA analyse en temps réel
-                et transmet un pré-diagnostic à votre médecin.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # ── File upload / replace logic ──
     if "uploaded_audio" not in st.session_state:
         st.session_state["uploaded_audio"] = None
         st.session_state["audio_data"] = None
         st.session_state["audio_sr"] = None
         st.session_state["analysis_sent"] = False
 
-    if st.session_state["uploaded_audio"] is None:
-        # Show uploader
-        uploaded_file = st.file_uploader(
-            "Déposer un fichier audio",
-            type=["wav", "mp3", "flac"],
-            label_visibility="collapsed",
+    analysis_sent = st.session_state.get("analysis_sent", False)
+
+    # ── Full-width logo (matches doctor dashboard header size) ──
+    st.markdown(
+        """
+        <div class="p-logo-wrap">
+            <div class="p-logo">TESS<span>AN</span></div>
+            <div class="p-tagline">CABINET MÉDICAL CONNECTÉ · ANALYSE RESPIRATOIRE</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ── NARROW SECTION: pharmacy / card / upload / send ──
+    _, narrow, _ = st.columns([1, 4, 1])
+    with narrow:
+        st.selectbox(
+            "Pharmacie du test",
+            options=pharmacy_options,
+            format_func=lambda pid: pharmacy_labels.get(pid, pid),
+            key="selected_pharmacy_id",
+            help="Sélectionnez la pharmacie où le test a été effectué.",
         )
 
-        st.markdown('<div class="p-or">ou</div>', unsafe_allow_html=True)
-
-        if st.button("🎙  Commencer l'enregistrement", use_container_width=True):
-            st.session_state["recorded"] = True
-
-        if uploaded_file:
-            if not uploaded_file.name.endswith((".wav", ".mp3", ".flac")):
-                st.error("Format non supporté")
-                st.markdown("</div>", unsafe_allow_html=True)
-                return
-            uploaded_file.seek(0)
-            with st.spinner("Chargement…"):
-                audio, sr = load_audio(uploaded_file)
-                audio, sr = preprocess_audio(audio, sr)
-            st.session_state["uploaded_audio"] = uploaded_file
-            st.session_state["audio_data"] = audio
-            st.session_state["audio_sr"] = sr
-            st.session_state["analysis_sent"] = False
-            st.rerun()
-    else:
-
-        # ── Audio player + replace button ──
-        st.session_state["uploaded_audio"].seek(0)
-        st.audio(st.session_state["uploaded_audio"])
-        st.markdown('<div class="replace-btn-wrap">', unsafe_allow_html=True)
-        if st.button("Remplacer le fichier", key="replace_audio"):
-            st.session_state["uploaded_audio"] = None
-            st.session_state["audio_data"] = None
-            st.session_state["audio_sr"] = None
-            st.session_state["analysis_sent"] = False
-            st.session_state["compare_class"] = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        audio = st.session_state["audio_data"]
-        sr = st.session_state["audio_sr"]
-
-        if not st.session_state.get("analysis_sent", False):
-            if st.button("Envoyer →", use_container_width=True, key="send_analysis"):
-                if not st.session_state.get("selected_pharmacy_id"):
-                    st.warning("Veuillez sélectionner une pharmacie avant l'envoi.")
-                    st.stop()
-
-                patient_id = st.session_state.get("user_id", "").strip()
-                if not patient_id:
-                    st.error("Identifiant patient introuvable. Veuillez vous reconnecter.")
-                    st.stop()
-
-                uploaded_audio = st.session_state.get("uploaded_audio")
-                if uploaded_audio is None:
-                    st.error("Aucun fichier audio à envoyer.")
-                    st.stop()
-
-                uploaded_audio.seek(0)
-                payload = uploaded_audio.read()
-                if not payload:
-                    st.error("Le fichier audio est vide.")
-                    st.stop()
-
-                stage_file_name = ""
-                audio_metadata = {}
-                try:
-                    with st.spinner("Envoi de l'audio vers la plateforme..."):
-                        stage_file_name, audio_metadata = upload_patient_audio_with_metadata(
-                            audio_bytes=payload,
-                            audio=audio,
-                            sr=sr,
-                            patient_id=patient_id,
-                            pharmacie_id=st.session_state.get("selected_pharmacy_id"),
-                            original_filename=getattr(uploaded_audio, "name", None),
-                        )
-                except Exception as exc:
-                    st.error(f"Impossible d'envoyer l'audio: {exc}")
-                    st.stop()
-
-                if not stage_file_name:
-                    st.error("Le fichier audio n'a pas pu etre enregistre.")
-                    st.stop()
-
-                # Keep selected pharmacy id available for downstream persistence.
-                st.session_state["analysis_pharmacie_id"] = st.session_state["selected_pharmacy_id"]
-                st.session_state["analysis_audio_file_name"] = stage_file_name
-                st.session_state["analysis_audio_metadata"] = audio_metadata
-                st.session_state["analysis_sent"] = True
-                st.rerun()
-        else:
-            # ── Forme d'onde ──
-            st.markdown(
-                '<div class="p-section-label">FORME D\'ONDE</div>',
-                unsafe_allow_html=True,
-            )
-            st.pyplot(waveform_chart(audio, sr), use_container_width=True)
-
-            # ── Mel-Spectrogramme ──
-            st.markdown(
-                '<div class="p-section-label">MEL-SPECTROGRAMME</div>',
-                unsafe_allow_html=True,
-            )
-            st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
-
-            # TODO: Replace fake data with model predictions
-            probas = [
-                ("Asthme", 62, "asthma"),
-                ("BPCO", 18, "copd"),
-                ("Pneumonie", 10, "pneumo"),
-                ("Bronchite", 7, "bronchi"),
-                ("Sain", 3, "healthy"),
-            ]
-
-            # ── Probability card ──
-            if "compare_class" not in st.session_state:
-                st.session_state["compare_class"] = None
-
-            rows_html = ""
-            for i, (name, pct, cls) in enumerate(probas):
-                is_last = i == len(probas) - 1
-                border_bottom = "none" if is_last else "1px solid #D7E3DC"
-
-                rows_html += f"""
-                <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;
-                            border-bottom:{border_bottom};background:#fff;">
-                    <div style="flex:1;">
-                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                            <span style="font-size:14px;font-weight:500;color:#0C4B43;
-                                         font-family:Inter,sans-serif;">{name}</span>
-                            <span style="font-size:13px;font-weight:600;color:{_CLS_COLORS[cls]};
-                                         font-family:Inter,sans-serif;">{pct}%</span>
-                        </div>
-                        <div style="height:7px;background:#E8EFEB;border-radius:999px;overflow:hidden;">
-                            <div style="height:7px;width:{pct}%;background:{_CLS_COLORS[cls]};
-                                        border-radius:999px;"></div>
-                        </div>
+        st.markdown(
+            """
+            <div class="p-card-header">
+                <div class="p-icon-row">
+                    <div class="p-header-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 8v4l3 3"/></svg>
                     </div>
+                    <span class="p-header-badge">Analyse IA</span>
                 </div>
-                """
-
-            st.markdown(
-                f"""
-                <div class="proba-card">
-                    <div class="proba-card-header">
-                        <span class="proba-card-title">Probabilités par classe</span>
-                    </div>
-                    {rows_html}
+                <div class="p-title">Analyse respiratoire</div>
+                <div class="p-subtitle">
+                    Déposez ou enregistrez votre respiration. Notre IA analyse en temps réel
+                    et transmet un pré-diagnostic à votre médecin.
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )         
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            # ── Compare dropdown ──
-            compare_options = ["—"] + [name for name, _, _ in probas]
-            cls_keys = [None] + [cls for _, _, cls in probas]
-            name_to_cls = {name: cls for name, _, cls in probas}
-
-            current_cls = st.session_state.get("compare_class")
-            current_name = "—"
-            for name, _, cls in probas:
-                if cls == current_cls:
-                    current_name = name
-                    break
-                
-            current_idx = compare_options.index(current_name)
-
-            def _on_compare_change():
-                sel = st.session_state.get("cmp_select", "—")
-                st.session_state["compare_class"] = name_to_cls.get(sel, None)
-
-            st.markdown(
-                '<div class="cmp-section-title">Comparer à un audio de référence</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown('<div class="cmp-select-wrap">', unsafe_allow_html=True)
-            st.selectbox(
-                "Comparer avec une référence",
-                options=compare_options,
-                index=current_idx,
-                key="cmp_select",
-                label_visibility="collapsed",
-                placeholder="⇄  Sélectionner une classe…",
-                on_change=_on_compare_change,
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # ── Inline comparison panel ──
-            if st.session_state["compare_class"] is not None:
-                active_cls = st.session_state["compare_class"]
-                ref_key = _CLS_TO_REF[active_cls]
-                ref = REF_AUDIOS[ref_key]
-                cls_color = _CLS_COLORS[active_cls]
-
-                st.markdown(
-                    f"""
-                    <div class="compare-panel" style="border-color: {cls_color};">
-                        <div class="compare-panel-header" style="background: {cls_color}12;">
-                            <div>
-                                <span class="compare-panel-tag" style="background:{cls_color}; color:#fff;">
-                                    Comparaison — {ref_key}
-                                </span>
-                                <span class="compare-panel-meta">{ref['meta']}</span>
-                            </div>
-                            <span class="compare-panel-sim">
-                                Similarité spectrale
-                                <strong>{ref['similarity']}%</strong>
-                            </span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        if not analysis_sent:
+            if st.session_state["uploaded_audio"] is None:
+                # Show uploader
+                uploaded_file = st.file_uploader(
+                    "Déposer un fichier audio",
+                    type=["wav", "mp3", "flac"],
+                    label_visibility="collapsed",
                 )
-
-                ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
-
-                # ── Side-by-side waveforms ──
-                st.markdown(
-                    '<div class="compare-section-label">FORME D\'ONDE</div>',
-                    unsafe_allow_html=True,
-                )
-                cw_p, cw_r = st.columns(2)
-                with cw_p:
-                    st.markdown(
-                        '<div class="compare-col-tag tag-patient">Patient</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.pyplot(waveform_chart(audio, sr), use_container_width=True)
-                with cw_r:
-                    st.markdown(
-                        '<div class="compare-col-tag tag-ref">Référence</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.pyplot(waveform_chart(ref_audio, ref_sr), use_container_width=True)
-
-                # ── Side-by-side mel spectrograms ──
-                st.markdown(
-                    '<div class="compare-section-label">MEL-SPECTROGRAMME</div>',
-                    unsafe_allow_html=True,
-                )
-                cm_p, cm_r = st.columns(2)
-                with cm_p:
-                    st.markdown(
-                        '<div class="compare-col-tag tag-patient">Patient</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
-                with cm_r:
-                    st.markdown(
-                        '<div class="compare-col-tag tag-ref">Référence</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.pyplot(mel_spectrogram(ref_audio, ref_sr), use_container_width=True)
-
-                # Close comparison
-                st.markdown('<div class="compare-close-wrap">', unsafe_allow_html=True)
-                if st.button("✕  Fermer la comparaison", key="close_cmp", use_container_width=True):
+                st.markdown('<div class="p-or">ou</div>', unsafe_allow_html=True)
+                if st.button("🎙  Commencer l'enregistrement", use_container_width=True):
+                    st.session_state["recorded"] = True
+                if uploaded_file:
+                    if not uploaded_file.name.endswith((".wav", ".mp3", ".flac")):
+                        st.error("Format non supporté")
+                        return
+                    uploaded_file.seek(0)
+                    with st.spinner("Chargement…"):
+                        audio, sr = load_audio(uploaded_file)
+                        audio, sr = preprocess_audio(audio, sr)
+                    st.session_state["uploaded_audio"] = uploaded_file
+                    st.session_state["audio_data"] = audio
+                    st.session_state["audio_sr"] = sr
+                    st.session_state["analysis_sent"] = False
+                    st.rerun()
+            else:
+                # ── Audio player + replace ──
+                st.session_state["uploaded_audio"].seek(0)
+                st.audio(st.session_state["uploaded_audio"])
+                st.markdown('<div class="replace-btn-wrap">', unsafe_allow_html=True)
+                if st.button("Remplacer le fichier", key="replace_audio"):
+                    st.session_state["uploaded_audio"] = None
+                    st.session_state["audio_data"] = None
+                    st.session_state["audio_sr"] = None
+                    st.session_state["analysis_sent"] = False
                     st.session_state["compare_class"] = None
+                    st.session_state["inference_result"] = None
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
-               # TODO: Generate recommendation text dynamically from model output
-            st.markdown(
-                """
-                <div class="rec-card">
-                    <div class="rec-header">
-                        <div class="rec-icon-wrap">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        </div>
-                        <div class="rec-title">Recommandation d'action</div>
+                # ── Send button ──
+                audio = st.session_state["audio_data"]
+                sr    = st.session_state["audio_sr"]
+                if st.button("Envoyer →", use_container_width=True, key="send_analysis"):
+                    if not st.session_state.get("selected_pharmacy_id"):
+                        st.warning("Veuillez sélectionner une pharmacie avant l'envoi.")
+                        st.stop()
+                    patient_id = st.session_state.get("user_id", "").strip()
+                    if not patient_id:
+                        st.error("Identifiant patient introuvable. Veuillez vous reconnecter.")
+                        st.stop()
+                    uploaded_audio = st.session_state.get("uploaded_audio")
+                    uploaded_audio.seek(0)
+                    payload = uploaded_audio.read()
+                    if not payload:
+                        st.error("Le fichier audio est vide.")
+                        st.stop()
+                    try:
+                        with st.spinner("Envoi de l'audio vers la plateforme..."):
+                            stage_file_name, audio_metadata, inference_result = upload_patient_audio_with_metadata(
+                                audio_bytes=payload,
+                                audio=audio,
+                                sr=sr,
+                                patient_id=patient_id,
+                                pharmacie_id=st.session_state.get("selected_pharmacy_id"),
+                                original_filename=getattr(uploaded_audio, "name", None),
+                            )
+                    except Exception as exc:
+                        st.error(f"Impossible d'envoyer l'audio: {exc}")
+                        st.stop()
+                    if not stage_file_name:
+                        st.error("Le fichier audio n'a pas pu etre enregistre.")
+                        st.stop()
+                    st.session_state["analysis_pharmacie_id"]    = st.session_state["selected_pharmacy_id"]
+                    st.session_state["analysis_audio_file_name"] = stage_file_name
+                    st.session_state["analysis_audio_metadata"]  = audio_metadata
+                    st.session_state["inference_result"]         = inference_result
+                    st.session_state["analysis_sent"]            = True
+                    st.rerun()
+        else:
+            # analysis done: show player + replace in the narrow column
+            st.session_state["uploaded_audio"].seek(0)
+            st.audio(st.session_state["uploaded_audio"])
+            st.markdown('<div class="replace-btn-wrap">', unsafe_allow_html=True)
+            if st.button("Remplacer le fichier", key="replace_audio"):
+                st.session_state["uploaded_audio"] = None
+                st.session_state["audio_data"] = None
+                st.session_state["audio_sr"] = None
+                st.session_state["analysis_sent"] = False
+                st.session_state["compare_class"] = None
+                st.session_state["inference_result"] = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── FULL WIDTH SECTION: charts (only when analysis is done) ──
+    if analysis_sent and st.session_state.get("uploaded_audio") is not None:
+        audio = st.session_state["audio_data"]
+        sr    = st.session_state["audio_sr"]
+        _ir   = st.session_state.get("inference_result") or {}
+
+        # ── Forme d'onde ──
+        st.markdown('<div class="p-section-label">FORME D\'ONDE</div>', unsafe_allow_html=True)
+        st.pyplot(waveform_chart(audio, sr), use_container_width=True)
+
+        # ── Mel-Spectrogramme ──
+        st.markdown('<div class="p-section-label">MEL-SPECTROGRAMME</div>', unsafe_allow_html=True)
+        st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
+
+        # ── Probability card ──
+        probas = sorted([
+            ("Asthme",    round(_ir.get("pct_asthma",    0)), "asthma"),
+            ("BPCO",      round(_ir.get("pct_copd",      0)), "copd"),
+            ("Pneumonie", round(_ir.get("pct_pneumonia", 0)), "pneumo"),
+            ("Bronchite", round(_ir.get("pct_bronchial", 0)), "bronchi"),
+            ("Sain",      round(_ir.get("pct_healthy",   0)), "healthy"),
+        ], key=lambda x: x[1], reverse=True)
+
+        if "compare_class" not in st.session_state:
+            st.session_state["compare_class"] = None
+
+        rows_html = ""
+        for i, (name, pct, cls) in enumerate(probas):
+            border_bottom = "none" if i == len(probas) - 1 else "1px solid #D7E3DC"
+            rows_html += f"""
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;
+                        border-bottom:{border_bottom};background:#fff;">
+                <div style="flex:1;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                        <span style="font-size:14px;font-weight:500;color:#0C4B43;
+                                     font-family:Inter,sans-serif;">{name}</span>
+                        <span style="font-size:13px;font-weight:600;color:{_CLS_COLORS[cls]};
+                                     font-family:Inter,sans-serif;">{pct}%</span>
                     </div>
-                    <div class="rec-body">
-                        Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
-                        Un suivi médical dans les <strong>48–72h</strong> est recommandé.
-                        En l'absence de symptômes aigus, une consultation de routine suffit.
-                        Si sibilances ou dyspnée aiguë : consultation urgente.
+                    <div style="height:7px;background:#E8EFEB;border-radius:999px;overflow:hidden;">
+                        <div style="height:7px;width:{pct}%;background:{_CLS_COLORS[cls]};
+                                    border-radius:999px;"></div>
                     </div>
                 </div>
-                """,
+            </div>
+            """
+
+        st.markdown(
+            f"""
+            <div class="proba-card">
+                <div class="proba-card-header">
+                    <span class="proba-card-title">Probabilités par classe</span>
+                </div>
+                {rows_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # ── Compare dropdown ──
+        compare_options = ["—"] + [name for name, _, _ in probas]
+        name_to_cls = {name: cls for name, _, cls in probas}
+        current_cls  = st.session_state.get("compare_class")
+        current_name = next((n for n, _, c in probas if c == current_cls), "—")
+        current_idx  = compare_options.index(current_name)
+
+        def _on_compare_change():
+            sel = st.session_state.get("cmp_select", "—")
+            st.session_state["compare_class"] = name_to_cls.get(sel, None)
+
+        st.markdown('<div class="cmp-section-title">Comparer à un audio de référence</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cmp-select-wrap">', unsafe_allow_html=True)
+        st.selectbox(
+            "Comparer avec une référence",
+            options=compare_options,
+            index=current_idx,
+            key="cmp_select",
+            label_visibility="collapsed",
+            placeholder="⇄  Sélectionner une classe…",
+            on_change=_on_compare_change,
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Inline comparison panel ──
+        if st.session_state["compare_class"] is not None:
+            active_cls = st.session_state["compare_class"]
+            ref_key    = _CLS_TO_REF[active_cls]
+            ref        = REF_AUDIOS[ref_key]
+            cls_color  = _CLS_COLORS[active_cls]
+
+            st.markdown(
+                f'<div class="compare-panel" style="border-color:{cls_color};">'
+                f'<div class="compare-panel-header" style="background:{cls_color}12;">'
+                f'<div><span class="compare-panel-tag" style="background:{cls_color};color:#fff;">'
+                f'Comparaison — {ref_key}</span>'
+                f'<span class="compare-panel-meta">{ref["meta"]}</span></div>'
+                f'<span class="compare-panel-sim">Similarité spectrale <strong>{ref["similarity"]}%</strong></span>'
+                f'</div></div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+            ref_audio, ref_sr = _load_ref_audio(ref["audio_file"])
+
+            st.markdown('<div class="compare-section-label">ÉCOUTE</div>', unsafe_allow_html=True)
+            ca_p, ca_r = st.columns(2)
+            with ca_p:
+                st.markdown('<div class="compare-col-tag tag-patient">Patient</div>', unsafe_allow_html=True)
+                st.session_state["uploaded_audio"].seek(0)
+                st.audio(st.session_state["uploaded_audio"])
+            with ca_r:
+                st.markdown('<div class="compare-col-tag tag-ref">Référence</div>', unsafe_allow_html=True)
+                st.audio(_load_ref_audio_bytes(ref["audio_file"]))
+
+            st.markdown('<div class="compare-section-label">FORME D\'ONDE</div>', unsafe_allow_html=True)
+            cw_p, cw_r = st.columns(2)
+            with cw_p:
+                st.markdown('<div class="compare-col-tag tag-patient">Patient</div>', unsafe_allow_html=True)
+                st.pyplot(waveform_chart(audio, sr), use_container_width=True)
+            with cw_r:
+                st.markdown('<div class="compare-col-tag tag-ref">Référence</div>', unsafe_allow_html=True)
+                st.pyplot(waveform_chart(ref_audio, ref_sr), use_container_width=True)
+
+            st.markdown('<div class="compare-section-label">MEL-SPECTROGRAMME</div>', unsafe_allow_html=True)
+            cm_p, cm_r = st.columns(2)
+            with cm_p:
+                st.markdown('<div class="compare-col-tag tag-patient">Patient</div>', unsafe_allow_html=True)
+                st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
+            with cm_r:
+                st.markdown('<div class="compare-col-tag tag-ref">Référence</div>', unsafe_allow_html=True)
+                st.pyplot(mel_spectrogram(ref_audio, ref_sr), use_container_width=True)
+
+            st.markdown('<div class="compare-close-wrap">', unsafe_allow_html=True)
+            if st.button("✕  Fermer la comparaison", key="close_cmp", use_container_width=True):
+                st.session_state["compare_class"] = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── Recommendation card ──
+        _rec_text = (_ir.get("detailed_action") or "Résultat en attente.").replace("\n", "<br>")
+        st.markdown(
+            f'<div class="rec-card"><div class="rec-header">'
+            f'<div class="rec-icon-wrap">'
+            f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+            f'</div><div class="rec-title">Recommandation d\'action</div></div>'
+            f'<div class="rec-body">{_rec_text}</div></div>',
+            unsafe_allow_html=True,
+        )
     
 
 
@@ -481,9 +442,9 @@ html, body, .stApp,
 }
 
 .block-container {
-    padding: 40px 20px !important;
-    max-width: 800px !important;
-    margin: 0 auto !important;
+    padding: 24px 20px 28px !important; /* Match doctor padding */
+    max-width: 1320px !important;       /* Match doctor width */
+    margin: 0 auto !important;          /* Center the container */
 }
 
 header[data-testid="stHeader"] { display: none !important; }
@@ -495,9 +456,17 @@ footer { display: none !important; }
 
 /* ━━ Logo ━━ */
 .p-logo-wrap {
-    text-align: center;
-    padding: 42px 0 28px;
-    background: var(--bg);
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBFAF6 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 14px 18px; /* Match .doc-header padding */
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Or space-between if you add user info later */
+    border-radius: 16px;
+    margin-bottom: 16px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .p-logo {

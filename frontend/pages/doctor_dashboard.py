@@ -33,9 +33,11 @@ DISEASES: dict[str, dict] = {
 _DISEASE_COLS = [d["col"] for d in DISEASES.values()]
 
 _ACTION_LABELS = {
-    "RAS":       "RAS",
-    "SUIVI_48H": "Suivi 48 h",
-    "URGENCE":   "Urgence",
+    "RAS":               "RAS",
+    "surveillance_7j":   "Suivi 7j",
+    "surveillance_48h":  "Suivi 48h",
+    "consultation_24h":  "Consultation 24h",
+    "urgent_6h":         "Urgent 6h",
 }
 
 # Dedicated map color for the "all diseases" view (distinct from class colors).
@@ -171,7 +173,7 @@ def _agg_for_map(df: pd.DataFrame, disease_key: str, granularity: str) -> pd.Dat
 
 # ── Rendu de la carte ─────────────────────────────────────────────────────────
 
-def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_ids: list[str]) -> None:
+def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_ids: list[str], focus: dict | None = None) -> None:
     map_df = _agg_for_map(df, disease_key, granularity)
 
     if map_df.empty:
@@ -220,13 +222,17 @@ def _render_map(df: pd.DataFrame, disease_key: str, granularity: str, selected_i
                 )
             )
 
+    view_lat  = focus["lat"]  if focus else 46.8
+    view_lon  = focus["lon"]  if focus else 2.35
+    view_zoom = focus["zoom"] if focus else 5
+
     st.pydeck_chart(
         pdk.Deck(
             layers=layers,
             initial_view_state=pdk.ViewState(
-                latitude=46.8,
-                longitude=2.35,
-                zoom=5,
+                latitude=view_lat,
+                longitude=view_lon,
+                zoom=view_zoom,
                 pitch=0,
             ),
             map_style="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
@@ -269,6 +275,9 @@ def render_dashboard() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+    if "map_focus" not in st.session_state:
+        st.session_state["map_focus"] = None
 
     today            = date.today()
     first_this_month = today.replace(day=1)
@@ -326,8 +335,8 @@ def render_dashboard() -> None:
         )
 
         total     = len(df)
-        urgents   = int((df["action"] == "URGENCE").sum())   if not df.empty else 0
-        confiance = float(df["pct_confiance"].mean() * 100)  if not df.empty else 0.0
+        urgents   = int((df["action"] == "urgent_6h").sum())  if not df.empty else 0
+        confiance = float(df["pct_confiance"].mean())         if not df.empty else 0.0
         ph_count  = int(df["pharmacie_id"].nunique())         if not df.empty else 0
 
         st.markdown(
@@ -341,7 +350,7 @@ def render_dashboard() -> None:
                 <div class="dash-metric">
                     <div class="dash-metric-label">Cas urgents</div>
                     <div class="dash-metric-value" style="color:#D95C4F;">{urgents}</div>
-                    <div class="dash-metric-sub">Action = Urgence</div>
+                    <div class="dash-metric-sub">Action = Urgent 6h</div>
                 </div>
                 <div class="dash-metric">
                     <div class="dash-metric-label">Confiance IA</div>
@@ -366,19 +375,25 @@ def render_dashboard() -> None:
             '<div class="doc-card-title">Carte des pré-diagnostics respiratoires</div>',
             unsafe_allow_html=True,
         )
+        focus = st.session_state["map_focus"]
+        if focus:
+            if st.button("⊙ Réinitialiser la vue", key="reset_map_focus"):
+                st.session_state["map_focus"] = None
+                st.rerun()
+
         tab_all, tab_asthma, tab_copd, tab_bronchial, tab_pneumonia = st.tabs(
             ["🗺 Toutes maladies", "Asthme", "BPCO", "Bronchite", "Pneumonie"]
         )
         with tab_all:
-            _render_map(df, "all", granularity, selected_ids)
+            _render_map(df, "all", granularity, selected_ids, focus)
         with tab_asthma:
-            _render_map(df, "asthma", granularity, selected_ids)
+            _render_map(df, "asthma", granularity, selected_ids, focus)
         with tab_copd:
-            _render_map(df, "copd", granularity, selected_ids)
+            _render_map(df, "copd", granularity, selected_ids, focus)
         with tab_bronchial:
-            _render_map(df, "bronchial", granularity, selected_ids)
+            _render_map(df, "bronchial", granularity, selected_ids, focus)
         with tab_pneumonia:
-            _render_map(df, "pneumonia", granularity, selected_ids)
+            _render_map(df, "pneumonia", granularity, selected_ids, focus)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Tableau pré-diagnostics ───────────────────────────────────────────
@@ -390,7 +405,7 @@ def render_dashboard() -> None:
         filter_suffix = f" — {', '.join(names)}"
 
     st.markdown(
-        f'<div class="doc-card" style="margin-top:16px;">'
+        f'<div class="doc-card pred-table-wrap" style="margin-top:16px;">'
         f'<div class="doc-card-title">Pré-diagnostics patients{filter_suffix}</div>',
         unsafe_allow_html=True,
     )
@@ -404,12 +419,9 @@ def render_dashboard() -> None:
         df_table = df_table.copy().reset_index(drop=True)
         df_table["dominant"] = df_table.apply(_dominant, axis=1)
         df_table["Pré-diagnostic"] = df_table.apply(
-            lambda r: f"Sain ({r['pct_healthy'] * 100:.0f} %)"
+            lambda r: "Sain"
             if r["dominant"] == "healthy"
-            else (
-                f"{DISEASES[r['dominant']]['label']} "
-                f"({r[DISEASES[r['dominant']]['col']] * 100:.0f} %)"
-            ),
+            else DISEASES[r["dominant"]]["label"],
             axis=1,
         )
 
@@ -420,16 +432,18 @@ def render_dashboard() -> None:
             "Commune":        df_table["commune"].fillna("—"),
             "Code postal":    df_table["code_postal"].fillna("—"),
             "Pré-diagnostic": df_table["Pré-diagnostic"],
-            "Confiance IA":   (df_table["pct_confiance"] * 100).round(1).astype(str) + " %",
+            "Confiance IA":   df_table["pct_confiance"].round(1).astype(str) + " %",
             "Action":         df_table["action"].map(_ACTION_LABELS).fillna(df_table["action"]),
         })
 
         _diag_hex = {k: "#{:02X}{:02X}{:02X}".format(*v["rgb"]) for k, v in DISEASES.items()}
         _diag_hex["healthy"] = "#1D9E75"
         _action_colors_map = {
-            _ACTION_LABELS["URGENCE"]:   "#D95C4F",
-            _ACTION_LABELS["SUIVI_48H"]: "#D8A63D",
-            _ACTION_LABELS["RAS"]:       "#9AA8A5",
+            _ACTION_LABELS["urgent_6h"]:        "#D95C4F",
+            _ACTION_LABELS["consultation_24h"]: "#E07040",
+            _ACTION_LABELS["surveillance_48h"]: "#D8A63D",
+            _ACTION_LABELS["surveillance_7j"]:  "#7EB89A",
+            _ACTION_LABELS["RAS"]:              "#9AA8A5",
         }
 
         def _badge(text: str, color: str) -> str:
@@ -440,34 +454,46 @@ def render_dashboard() -> None:
                 f'white-space:nowrap;">{text}</span>'
             )
 
-        rows = []
-        for i in display.index:
-            dom         = df_table.at[i, "dominant"]
-            diag_color  = _diag_hex.get(dom, "#9AA8A5")
-            action_val  = display.at[i, "Action"]
-            action_color = _action_colors_map.get(action_val, "#9AA8A5")
-            row_bg      = "background:rgba(217,92,79,0.06);" if action_val == _ACTION_LABELS["URGENCE"] else ""
-            diag_cell   = display.at[i, "Pré-diagnostic"] if dom == "healthy" else _badge(display.at[i, "Pré-diagnostic"], diag_color)
-            rows.append(
-                f'<tr style="{row_bg}">'
-                f'<td style="color:var(--text-soft);font-size:12px;">{display.at[i,"Date"]}</td>'
-                f'<td style="font-family:monospace;font-size:12px;">{display.at[i,"Patient (NSS)"]}</td>'
-                f'<td>{display.at[i,"Pharmacie"]}</td>'
-                f'<td style="color:var(--text-muted);">{display.at[i,"Commune"]}</td>'
-                f'<td>{diag_cell}</td>'
-                f'<td style="text-align:right;">{display.at[i,"Confiance IA"]}</td>'
-                f'<td>{_badge(action_val, action_color)}</td>'
-                f'</tr>'
-            )
-
-        _headers = ["Date", "Patient (NSS)", "Pharmacie", "Commune", "Pré-diagnostic", "Confiance IA", "Action"]
-        thead = "".join(f"<th>{h}</th>" for h in _headers)
-        st.markdown(
-            f'<div style="overflow-x:auto;">'
-            f'<table class="pred-table"><thead><tr>{thead}</tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table></div>',
-            unsafe_allow_html=True,
+        _COL_W = [1.8, 1.8, 2.2, 1.5, 2, 1.1, 2, 0.45]
+        _th = lambda t: (
+            f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.08em;color:var(--text-muted);padding:6px 4px 10px;'
+            f'border-bottom:2px solid var(--border);font-family:var(--font-body);">{t}</div>'
         )
+        _td = lambda t, extra="": (
+            f'<div style="font-size:13px;padding:9px 4px;font-family:var(--font-body);{extra}">{t}</div>'
+        )
+
+        hcols = st.columns(_COL_W)
+        for col, h in zip(hcols, ["Date", "Patient (NSS)", "Pharmacie", "Commune",
+                                    "Pré-diagnostic", "Confiance", "Action", ""]):
+            col.markdown(_th(h), unsafe_allow_html=True)
+
+        for i in display.index:
+            dom          = df_table.at[i, "dominant"]
+            diag_color   = _diag_hex.get(dom, "#9AA8A5")
+            action_val   = display.at[i, "Action"]
+            action_color = _action_colors_map.get(action_val, "#9AA8A5")
+
+            rcols = st.columns(_COL_W)
+            rcols[0].markdown(_td(display.at[i, "Date"],         "color:var(--text-soft);font-size:12px;"), unsafe_allow_html=True)
+            rcols[1].markdown(_td(display.at[i, "Patient (NSS)"],"font-family:monospace;font-size:12px;"), unsafe_allow_html=True)
+            rcols[2].markdown(_td(display.at[i, "Pharmacie"]),    unsafe_allow_html=True)
+            rcols[3].markdown(_td(display.at[i, "Commune"],      "color:var(--text-muted);"),              unsafe_allow_html=True)
+            rcols[4].markdown(_badge(display.at[i, "Pré-diagnostic"], diag_color),                         unsafe_allow_html=True)
+            rcols[5].markdown(_td(display.at[i, "Confiance IA"], "text-align:right;"),                     unsafe_allow_html=True)
+            rcols[6].markdown(_badge(action_val, action_color),                                             unsafe_allow_html=True)
+            with rcols[7]:
+                if st.button("📍", key=f"zoom_{i}", help="Zoomer sur la carte"):
+                    lat = df_table.iloc[i]["loc_lat"]
+                    lon = df_table.iloc[i]["loc_long"]
+                    if pd.notna(lat) and pd.notna(lon):
+                        st.session_state["map_focus"] = {
+                            "lat": float(lat), "lon": float(lon), "zoom": 14,
+                        }
+                        st.rerun()
+                    else:
+                        st.caption("Pas de coordonnées.")
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -697,41 +723,33 @@ _DASHBOARD_CSS = """
     display: inline-block;
 }
 
-/* ━━ Predictions table ━━ */
-.pred-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-body);
-    font-size: 13px;
-    color: var(--text-main);
-}
+/* ━━ Predictions table (columns-based) ━━ */
 
-.pred-table thead tr {
+/* Remove Streamlit's default gap & padding from column rows in the table area */
+.pred-table-wrap [data-testid="stHorizontalBlock"] {
+    gap: 0 !important;
     border-bottom: 1px solid var(--border);
+    padding: 0 !important;
+    align-items: center;
 }
-
-.pred-table th {
-    text-align: left;
-    padding: 8px 12px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-}
-
-.pred-table td {
-    padding: 9px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-}
-
-.pred-table tbody tr:last-child td {
+.pred-table-wrap [data-testid="stHorizontalBlock"]:last-child {
     border-bottom: none;
 }
-
-.pred-table tbody tr:hover td {
-    background: rgba(0,0,0,0.02);
+.pred-table-wrap [data-testid="stHorizontalBlock"]:hover {
+    background: rgba(0,0,0,0.015);
+}
+/* Shrink the pin button to be unobtrusive */
+.pred-table-wrap button[kind="secondary"] {
+    padding: 2px 6px !important;
+    font-size: 14px !important;
+    min-height: unset !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-muted) !important;
+}
+.pred-table-wrap button[kind="secondary"]:hover {
+    color: var(--green) !important;
+    background: transparent !important;
 }
 
 /* ━━ Mobile ━━ */
