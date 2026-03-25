@@ -39,7 +39,7 @@ _ACTIONS: dict[str, list[tuple[float, str, str]]] = {
          "Asthme très probable. Consultation sous 24h, traitement de fond (CSI ± LABA) à évaluer. "
          "Vérifier disponibilité d'un bronchodilatateur d'urgence (salbutamol). "
          "⚠ SpO₂ < 92% ou crise nocturne → SAMU (15)."),
-        (0.60, "surveillance_48h",
+        (0.50, "surveillance_48h",
          "Profil asthmatique probable. Suivi médical 48–72h, spirométrie pour confirmer. "
          "⚠ Sibilances ou dyspnée aiguë → consultation urgente."),
         (0.00, "surveillance_7j",
@@ -50,7 +50,7 @@ _ACTIONS: dict[str, list[tuple[float, str, str]]] = {
         (0.85, "urgent_6h",
          "Pneumonie très probable. Prise en charge sous 6h, score CRB-65 à évaluer pour hospitalisation. "
          "⚠ SpO₂ < 90% ou confusion → SAMU (15) immédiat."),
-        (0.60, "consultation_24h",
+        (0.50, "consultation_24h",
          "Pneumonie probable. Consultation dans les 24h, antibiothérapie probable (amoxicilline 1ère intention). "
          "⚠ SpO₂ < 94% ou FR > 25/min → urgences."),
         (0.00, "surveillance_48h",
@@ -61,7 +61,7 @@ _ACTIONS: dict[str, list[tuple[float, str, str]]] = {
         (0.85, "consultation_24h",
          "BPCO très probable. Consultation pneumologique sous 48h, stadification GOLD indispensable. "
          "⚠ SpO₂ < 88% → oxygénothérapie + urgences ; exacerbation sévère → hospitalisation."),
-        (0.60, "surveillance_7j",
+        (0.50, "surveillance_7j",
          "BPCO probable. Consultation pneumologique sous 7 jours, arrêt du tabac prioritaire. "
          "Évaluation bronchodilatateurs longue durée (LAMA/LABA), vaccination grippe + pneumocoque. "
          "⚠ Exacerbation (↑ dyspnée + ↑ expectoration) → consultation sous 24h."),
@@ -73,7 +73,7 @@ _ACTIONS: dict[str, list[tuple[float, str, str]]] = {
         (0.85, "surveillance_48h",
          "Bronchite aiguë très probable. Consultation sous 48h pour écarter surinfection. "
          "⚠ FR > 25/min ou SpO₂ < 94% → éliminer pneumonie en urgence."),
-        (0.60, "surveillance_7j",
+        (0.50, "surveillance_7j",
          "Bronchite aiguë probable. Généralement virale, résolution en 7–14j. "
          "Pas d'antibiotiques en 1ère intention sauf expectoration purulente > 10j ou terrain fragile."),
         (0.00, "surveillance_7j",
