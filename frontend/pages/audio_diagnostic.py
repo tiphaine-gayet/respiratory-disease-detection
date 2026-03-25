@@ -186,6 +186,7 @@ def render_diagnostic(is_doctor=False):
             st.session_state["audio_sr"] = None
             st.session_state["analysis_sent"] = False
             st.session_state["compare_class"] = None
+            st.session_state["inference_result"] = None
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -218,7 +219,7 @@ def render_diagnostic(is_doctor=False):
                 audio_metadata = {}
                 try:
                     with st.spinner("Envoi de l'audio vers la plateforme..."):
-                        stage_file_name, audio_metadata = upload_patient_audio_with_metadata(
+                        stage_file_name, audio_metadata, inference_result = upload_patient_audio_with_metadata(
                             audio_bytes=payload,
                             audio=audio,
                             sr=sr,
@@ -238,6 +239,7 @@ def render_diagnostic(is_doctor=False):
                 st.session_state["analysis_pharmacie_id"] = st.session_state["selected_pharmacy_id"]
                 st.session_state["analysis_audio_file_name"] = stage_file_name
                 st.session_state["analysis_audio_metadata"] = audio_metadata
+                st.session_state["inference_result"] = inference_result
                 st.session_state["analysis_sent"] = True
                 st.rerun()
         else:
@@ -255,14 +257,15 @@ def render_diagnostic(is_doctor=False):
             )
             st.pyplot(mel_spectrogram(audio, sr), use_container_width=True)
 
-            # TODO: Replace fake data with model predictions
-            probas = [
-                ("Asthme", 62, "asthma"),
-                ("BPCO", 18, "copd"),
-                ("Pneumonie", 10, "pneumo"),
-                ("Bronchite", 7, "bronchi"),
-                ("Sain", 3, "healthy"),
-            ]
+            # Build probas from model predictions stored in session state
+            _ir = st.session_state.get("inference_result") or {}
+            probas = sorted([
+                ("Asthme",    round(_ir.get("pct_asthma",    0)), "asthma"),
+                ("BPCO",      round(_ir.get("pct_copd",      0)), "copd"),
+                ("Pneumonie", round(_ir.get("pct_pneumonia", 0)), "pneumo"),
+                ("Bronchite", round(_ir.get("pct_bronchial", 0)), "bronchi"),
+                ("Sain",      round(_ir.get("pct_healthy",   0)), "healthy"),
+            ], key=lambda x: x[1], reverse=True)
 
             # ── Probability card ──
             if "compare_class" not in st.session_state:
@@ -411,9 +414,9 @@ def render_diagnostic(is_doctor=False):
                     st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
-               # TODO: Generate recommendation text dynamically from model output
+            _rec_text = (_ir.get("detailed_action") or "Résultat en attente.").replace("\n", "<br>")
             st.markdown(
-                """
+                f"""
                 <div class="rec-card">
                     <div class="rec-header">
                         <div class="rec-icon-wrap">
@@ -421,12 +424,7 @@ def render_diagnostic(is_doctor=False):
                         </div>
                         <div class="rec-title">Recommandation d'action</div>
                     </div>
-                    <div class="rec-body">
-                        Le modèle détecte avec <strong>62%</strong> de probabilité un <strong>profil asthmatique</strong>.
-                        Un suivi médical dans les <strong>48–72h</strong> est recommandé.
-                        En l'absence de symptômes aigus, une consultation de routine suffit.
-                        Si sibilances ou dyspnée aiguë : consultation urgente.
-                    </div>
+                    <div class="rec-body">{_rec_text}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
