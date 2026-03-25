@@ -12,6 +12,7 @@ help:
 	@echo "  make raw               - Transfer raw audio files and metadata to Snowflake"
 	@echo "  make app               - Set up predictions table and load data used in app (pharmacies in France) into Snowflake"
 	@echo "  make ingested          - Create INGESTED schema (ingested audio files, extracted features, and metadata)"
+	@echo "  make model             - Load model to Snowflake and deploy inference procedure"
 	@echo ""
 	@echo "Run Streamlit app:"
 	@echo "  make streamlit          - Start the Streamlit app"
@@ -52,12 +53,19 @@ ingested:
 	@python -m backend.infra.ingested.table_ingested_sounds_metadata
 	@python -m backend.infra.ingested.table_processed_sounds_metadata
 	@echo "✅ Done!"
+
+model:
+	@echo "🚀 Load model to Snowflake and deploy inference procedure"
+	@python -m backend.infra.model.stg_model
+	@python -m backend.infra.model.proc_run_inference
+	@echo "✅ Done!"
 	
 infra:
 	@python -m backend.infra.schemas
 	@make raw
 	@make ingested
 	@make app
+	@make model
 
 streamlit:
 	@echo "🚀 Starting Streamlit app..."

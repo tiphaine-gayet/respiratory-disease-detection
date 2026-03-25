@@ -39,6 +39,7 @@ def create_table(client):
 
             -- Clinical action derived from prediction
             action            VARCHAR        NOT NULL,  -- RAS | SUIVI_48H | URGENCE
+            detailed_action   VARCHAR                   -- e.g. "Aucun suivi nécessaire", "Suivi dans les 48h", "Orientation vers urgence"
 
             -- Model traceability
             model_version     VARCHAR,

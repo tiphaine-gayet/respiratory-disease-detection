@@ -29,13 +29,26 @@ def create_table(client):
             n_samples              INTEGER,
             amplitude_max          FLOAT,
             rms                    FLOAT,
-            mel_spectrogram        VARIANT,                   -- JSON with mel spectrogram data (128, T)
+            mel_npy_filename       VARCHAR,                   -- filename in STG_MEL_NPY (e.g. <patient_id>_<timestamp>.npy)
             processed_at           TIMESTAMP_NTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP(),
             PRIMARY KEY (file_name),
             FOREIGN KEY (original_file_name) REFERENCES {DATABASE}.{SCHEMA}.INGESTED_SOUNDS_METADATA(file_name)
         )
     """)
     print(f"✅ Table {DATABASE}.{SCHEMA}.{TABLE} created (if not exists).")
+
+    # Migration: add mel_npy_filename if table already exists without it
+    client.execute(f"""
+        ALTER TABLE {DATABASE}.{SCHEMA}.{TABLE}
+        ADD COLUMN IF NOT EXISTS mel_npy_filename VARCHAR
+    """)
+
+    # Migration: remove old mel_spectrogram VARIANT column if still present
+    client.execute(f"""
+        ALTER TABLE {DATABASE}.{SCHEMA}.{TABLE}
+        DROP COLUMN IF EXISTS mel_spectrogram
+    """)
+    print(f"✅ Table {DATABASE}.{SCHEMA}.{TABLE} schema up to date.")
 
 
 if __name__ == "__main__":

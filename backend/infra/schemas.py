@@ -7,6 +7,7 @@ SCHEMAS = {
     os.getenv("SNOWFLAKE_SCHEMA_PROCESSED"),
     os.getenv("SNOWFLAKE_SCHEMA_INGESTED"),
     os.getenv("SNOWFLAKE_SCHEMA_APP"),
+    os.getenv("SNOWFLAKE_SCHEMA_MODEL"),
 }
 
 def create_schema(client, schema):
