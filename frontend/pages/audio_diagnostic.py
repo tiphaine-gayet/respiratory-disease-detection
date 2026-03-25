@@ -295,9 +295,14 @@ def render_diagnostic(is_doctor=False):
             """
 
         st.markdown(
-            f'<div class="proba-card"><div class="proba-card-header">'
-            f'<span class="proba-card-title">Probabilités par classe</span></div>'
-            f'{rows_html}</div>',
+            f"""
+            <div class="proba-card">
+                <div class="proba-card-header">
+                    <span class="proba-card-title">Probabilités par classe</span>
+                </div>
+                {rows_html}
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
