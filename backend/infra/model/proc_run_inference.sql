@@ -1,31 +1,38 @@
-CREATE OR REPLACE PROCEDURE M2_ISD_EQUIPE_1_DB.MODEL.RUN_INFERENCE("MEL_NPY_FILENAME" VARCHAR)
+CREATE OR REPLACE PROCEDURE M2_ISD_EQUIPE_1_DB.MODEL.RUN_INFERENCE(mel_npy_filename VARCHAR)
 RETURNS VARIANT
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.9'
-PACKAGES = ('snowflake-snowpark-python','pytorch','torchvision','numpy')
+PACKAGES = ('snowflake-snowpark-python', 'pytorch', 'torchvision', 'numpy')
+IMPORTS = (
+    '@"M2_ISD_EQUIPE_1_DB"."MODEL"."STG_MODEL"/v0/best_model.pth',
+    '@"M2_ISD_EQUIPE_1_DB"."MODEL"."STG_MODEL"/v0/model_metadata.pkl'
+)
 HANDLER = 'run_inference'
-IMPORTS = ('@M2_ISD_EQUIPE_1_DB.MODEL.STG_MODEL/v0/best_model.pth','@M2_ISD_EQUIPE_1_DB.MODEL.STG_MODEL/v0/model_metadata.pkl')
-EXECUTE AS OWNER
-AS '
-import sys, os, pickle, torch, numpy as np, io
+AS
+$$
+import sys, os, pickle, torch, numpy as np, tempfile
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet34
-from snowflake.snowpark.files import SnowflakeFile
 
 def run_inference(session, mel_npy_filename):
     import_dir = sys._xoptions.get("snowflake_import_directory", "/tmp")
 
+    # ── 1. Charger metadata & modèle ──
     with open(os.path.join(import_dir, "model_metadata.pkl"), "rb") as f:
         metadata = pickle.load(f)
 
-    class_names    = metadata["class_names"]
-    num_channels   = metadata["num_channels"]
-    num_classes    = len(class_names)
-    dropout_rate   = metadata["dropout_rate"]
-    img_size       = metadata["img_size"]
-    feature_ranges = metadata["feature_ranges"]
-    model_version  = metadata.get("version", "1.0.0")
+    class_names  = metadata["class_names"]
+    num_classes  = len(class_names)
+    img_size     = metadata["img_size"]
+    dropout_rate = metadata.get("dropout_rate", 0.0)
+    mel_db_min   = metadata.get("mel_db_min", -80.0)
+    mel_db_max   = metadata.get("mel_db_max",   0.0)
+    model_version = metadata.get("version", "1.0.0")
+
+    # Derive num_channels from the checkpoint itself (robust regardless of metadata version)
+    ckpt_tmp = torch.load(os.path.join(import_dir, "best_model.pth"), map_location="cpu")
+    num_channels = ckpt_tmp["model_state_dict"]["model.conv1.weight"].shape[1]
 
     class ResNetAudio(nn.Module):
         def __init__(self):
@@ -44,20 +51,21 @@ def run_inference(session, mel_npy_filename):
             return x
 
     model = ResNetAudio()
-    ckpt  = torch.load(os.path.join(import_dir, "best_model.pth"), map_location="cpu")
-    model.load_state_dict(ckpt["model_state_dict"])
+    model.load_state_dict(ckpt_tmp["model_state_dict"])
     model.eval()
 
-    def predict_from_npy(stage_path):
-        with SnowflakeFile.open(stage_path, ''rb'', require_scoped_url=False) as f:
-            feat_data = np.load(io.BytesIO(f.read()))
+    # ── 2. Télécharger le .npy et prédire ──
+    def predict_from_npy(file_path):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            session.file.get(file_path, tmp_dir)
+            local_file = os.path.join(tmp_dir, os.path.basename(file_path))
+            feat_data  = np.load(local_file)
 
         t = torch.tensor(feat_data).float()
         if t.dim() == 1:   t = t.unsqueeze(0)
         elif t.dim() == 3: t = t.reshape(t.shape[0], -1)
 
-        feat_min, feat_max = feature_ranges["FEAT_MEL"]
-        t = (t.clamp(feat_min, feat_max) - feat_min) / (feat_max - feat_min + 1e-8)
+        t = (t.clamp(mel_db_min, mel_db_max) - mel_db_min) / (mel_db_max - mel_db_min + 1e-8)
 
         if t.shape[0] != 64:
             t = F.interpolate(
@@ -71,24 +79,24 @@ def run_inference(session, mel_npy_filename):
             size=img_size,
             mode="bilinear", align_corners=False
         ).squeeze(0)
-        t = t.unsqueeze(0)
+        t = t.unsqueeze(0)  # batch dim
 
         with torch.no_grad():
             probs = torch.softmax(model(t), dim=1)[0].numpy()
 
         return probs
 
-    stage_path = f''@M2_ISD_EQUIPE_1_DB.INGESTED.STG_MEL_NPY/{mel_npy_filename}''
+    stage_path = f"@M2_ISD_EQUIPE_1_DB.INGESTED.STG_MEL_NPY/{mel_npy_filename}"
     probs      = predict_from_npy(stage_path)
     prob_map   = {cls: round(float(probs[i]) * 100, 2) for i, cls in enumerate(class_names)}
 
     return {
-        "pct_asthma":    prob_map.get("Asthma",    0.0),
-        "pct_copd":      prob_map.get("COPD",      0.0),
-        "pct_bronchial": prob_map.get("Bronchial", 0.0),
-        "pct_pneumonia": prob_map.get("Pneumonia", 0.0),
-        "pct_healthy":   prob_map.get("Healthy",   0.0),
+        "pct_asthma":    prob_map.get("asthma",    0.0),
+        "pct_copd":      prob_map.get("copd",      0.0),
+        "pct_bronchial": prob_map.get("bronchial", 0.0),
+        "pct_pneumonia": prob_map.get("pneumonia", 0.0),
+        "pct_healthy":   prob_map.get("healthy",   0.0),
         "pct_confiance": round(float(np.max(probs)) * 100, 2),
         "model_version": model_version,
     }
-';
+$$;
