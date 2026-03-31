@@ -5,6 +5,7 @@ Plateforme médicale de diagnostic des maladies respiratoires par analyse audio,
 ## Sommaire
 
 - [Présentation du projet](#présentation-du-projet)
+- [Demo de l'application](#demo-de-lapplication)
 - [Architecture](#architecture)
 - [Prérequis](#prérequis)
 - [Installation](#installation)
@@ -23,6 +24,12 @@ TESSAN permet :
 - Aux **médecins** de consulter un tableau de bord interactif avec la distribution géographique des cas en France, les métriques de santé et les prédictions filtrables.
 
 Les modèles ML analysent les spectrogrammes Mel extraits des fichiers audio pour classer les maladies.
+
+---
+
+## Demo de l'application
+
+![Demo de l'application TESSAN](https://youtu.be/uxoD0OC0S8c)
 
 ---
 
