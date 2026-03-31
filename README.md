@@ -46,7 +46,7 @@ Frontend (Streamlit)  ←→  Backend (Python)  ←→  Snowflake (Data Warehous
 
 ## Prérequis
 
-- Python **3.10+**
+- Python **3.11**
 - Un compte **Snowflake** avec les droits appropriés
 - Un compte **Kaggle** (pour le téléchargement du dataset)
 - `make` (disponible sur Linux/macOS)
@@ -73,7 +73,7 @@ Cette commande crée un environnement virtuel Python et installe toutes les dép
 Pour activer manuellement l'environnement :
 
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 ```
 
 ### 3. Télécharger le dataset
@@ -102,7 +102,6 @@ cp .env.example .env
 SNOWFLAKE_ACCOUNT=<votre_compte>          # ex: xy12345.eu-west-1
 SNOWFLAKE_USER=<votre_utilisateur>
 SNOWFLAKE_TOKEN=<votre_token_jwt>
-SNOWFLAKE_PWD=<votre_mot_de_passe>
 SNOWFLAKE_ROLE=M2_ISD_EQUIPE_1_ROLE
 SNOWFLAKE_WAREHOUSE=M2_ISD_E1_WH
 SNOWFLAKE_DATABASE=M2_ISD_EQUIPE_1_DB
@@ -191,11 +190,11 @@ respiratory-disease-detection/
 
 ## Stack technique
 
-| Composant | Technologies |
-|---|---|
-| Frontend | Streamlit, Pydeck, Matplotlib |
-| Traitement audio | Librosa, SoundFile |
-| Deep Learning | PyTorch, Torchvision |
-| Data Warehouse | Snowflake Snowpark |
-| Sécurité | PyJWT, cryptography (PBKDF2-HMAC-SHA256) |
-| Qualité du code | Ruff, Bandit, pre-commit |
+| Composant        | Technologies                          |
+|------------------|----------------------------------------|
+| Frontend         | Streamlit, Pydeck, Matplotlib         |
+| Traitement audio | Librosa, SoundFile                    |
+| Deep Learning    | PyTorch, Torchvision                  |
+| Data Warehouse   | Snowflake Snowpark                    |
+| Sécurité         | PyJWT, cryptography (PBKDF2-HMAC-SHA256) |
+| Qualité du code  | Ruff, Bandit, pre-commit              |
