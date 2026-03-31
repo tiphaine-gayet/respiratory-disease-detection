@@ -29,7 +29,7 @@ Les modèles ML analysent les spectrogrammes Mel extraits des fichiers audio pou
 
 ## Demo de l'application
 
-![Demo de l'application TESSAN](https://youtu.be/uxoD0OC0S8c)
+[![Demo de l'application TESSAN](demo_thumbnail.png)](https://youtu.be/uxoD0OC0S8c)
 
 ---
 
